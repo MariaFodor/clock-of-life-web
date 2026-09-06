@@ -130,6 +130,11 @@ export function scoreEstimate(p: Profile): EstimateResult {
   }
 }
 
+/** Average remaining years for the reference (average) person at this age & sex — i.e. RR = 1. */
+export function averageRemainingYears(age: number, sex: Profile['sex']): number {
+  return round1(remainingYears(age, sex, 1))
+}
+
 export interface WhatIfResult {
   current_years: number
   scenario_years: number

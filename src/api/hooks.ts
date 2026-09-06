@@ -12,6 +12,7 @@ export const queryKeys = {
   stats: ['stats'] as const,
   why: (p: Profile | null) => ['why', p] as const,
   recommendations: (p: Profile | null) => ['recommendations', p] as const,
+  benchmark: (p: Profile | null) => ['benchmark', p] as const,
 }
 
 export function useMeta() {
@@ -38,6 +39,14 @@ export function useWhy(profile: Profile | null) {
   return useQuery({
     queryKey: queryKeys.why(profile),
     queryFn: () => getClient().getWhy(profile!),
+    enabled: !!profile,
+  })
+}
+
+export function useBenchmark(profile: Profile | null) {
+  return useQuery({
+    queryKey: queryKeys.benchmark(profile),
+    queryFn: () => getClient().getBenchmark(profile!),
     enabled: !!profile,
   })
 }

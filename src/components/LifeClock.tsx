@@ -5,6 +5,7 @@
 // interval — so the interval is *always* visible, per the framing rules. Nothing here is a promise.
 
 import { fmtYears } from './format'
+import { useCountUp } from './motion'
 
 const SIZE = 240
 const C = SIZE / 2
@@ -71,6 +72,12 @@ export function LifeClock({ age, estimateYears, reachesAge, interval, compact = 
   const fIntLow = Math.min(1, (age + interval[0]) / max)
   const fIntHigh = Math.min(1, (age + interval[1]) / max)
 
+  // Draw-in animation: `anim` runs 0→1, growing each arc from its start; the centre number counts up.
+  // Both collapse to their final value immediately when the viewer prefers reduced motion.
+  const anim = useCountUp(1, 950)
+  const shownYears = useCountUp(estimateYears, 950)
+  const grow = (from: number, to: number) => from + (to - from) * anim
+
   const dim = compact ? 168 : 240
   const belowCurrentAge = reachesAge <= age
 
@@ -86,18 +93,18 @@ export function LifeClock({ age, estimateYears, reachesAge, interval, compact = 
         {/* full track */}
         <Arc from={0} to={1} color="#e3e8ee" width={TRACK_W} rounded={false} />
         {/* uncertainty band at the frontier (always shown) */}
-        <Arc from={fIntLow} to={fIntHigh} color="#2b6cb0" width={BAND_W} opacity={0.18} rounded={false} />
+        <Arc from={grow(fLived, fIntLow)} to={grow(fLived, fIntHigh)} color="#2b6cb0" width={BAND_W} opacity={0.18} rounded={false} />
         {/* life lived */}
-        <Arc from={0} to={fLived} color="#9aa8b8" width={TRACK_W} />
+        <Arc from={0} to={grow(0, fLived)} color="#9aa8b8" width={TRACK_W} />
         {/* estimated remaining */}
-        <Arc from={fLived} to={fReaches} color={belowCurrentAge ? '#c05621' : '#2b6cb0'} width={TRACK_W} />
+        <Arc from={fLived} to={grow(fLived, fReaches)} color={belowCurrentAge ? '#c05621' : '#2b6cb0'} width={TRACK_W} />
 
         {/* centre readout */}
         <text x={C} y={C - 14} textAnchor="middle" className="fill-clock-muted" style={{ fontSize: 13 }}>
           estimated
         </text>
         <text x={C} y={C + 20} textAnchor="middle" className="fill-clock-ink" style={{ fontSize: 46, fontWeight: 700 }}>
-          {estimateYears.toFixed(1)}
+          {shownYears.toFixed(1)}
         </text>
         <text x={C} y={C + 42} textAnchor="middle" className="fill-clock-muted" style={{ fontSize: 13 }}>
           more years

@@ -1,17 +1,34 @@
 import { useState } from 'react'
 import { useProfile } from '../../app/profile'
 import { useWhatIf } from '../../api/hooks'
-import type { SmokeStatus, WhatIfChanges } from '../../api/types'
+import type { SmokeStatus, WhatIf, WhatIfChanges } from '../../api/types'
 import { PageHeader, Card, NeedsProfile } from '../../components/ui'
 import { StatisticalEstimateNote } from '../../components/framing'
 import { fmtDelta, fmtYears, deltaTone } from '../../components/format'
 
 const SMOKE_LABEL: Record<SmokeStatus, string> = { 0: 'Never', 1: 'Former', 2: 'Current' }
 
+interface SavedScenario {
+  id: number
+  summary: string
+  result: WhatIf
+}
+
+/** A short human summary of which levers a scenario changed. */
+function summarizeChanges(changes: WhatIfChanges): string {
+  const parts: string[] = []
+  if (changes.smoke !== undefined) parts.push(`smoking → ${SMOKE_LABEL[changes.smoke]}`)
+  if (changes.pa_min !== undefined) parts.push(`activity → ${changes.pa_min.toFixed(0)} MET-min`)
+  if (changes.sleep !== undefined) parts.push(`sleep → ${changes.sleep.toFixed(1)} h`)
+  if (changes.waist !== undefined) parts.push(`waist → ${changes.waist.toFixed(0)} cm`)
+  return parts.length ? parts.join(', ') : 'no change'
+}
+
 export function WhatIfPage() {
   const { profile } = useProfile()
   const whatif = useWhatIf()
   const [changes, setChanges] = useState<WhatIfChanges>({})
+  const [scenarios, setScenarios] = useState<SavedScenario[]>([])
 
   if (!profile) {
     return (
@@ -32,6 +49,13 @@ export function WhatIfPage() {
     setChanges({})
     whatif.reset()
   }
+  const save = () => {
+    if (!whatif.data) return
+    setScenarios((prev) => [...prev, { id: Date.now(), summary: summarizeChanges(changes), result: whatif.data! }])
+  }
+
+  // Best = the largest gain in years (ties broken by insertion order).
+  const bestDelta = scenarios.length ? Math.max(...scenarios.map((s) => s.result.delta_years)) : null
 
   return (
     <div>
@@ -129,11 +153,58 @@ export function WhatIfPage() {
           {whatif.data.note && (
             <p className="mt-3 rounded-lg bg-clock-warn/5 p-2 text-xs text-clock-warn">{whatif.data.note}</p>
           )}
-          <div className="mt-3">
+          <div className="mt-3 flex items-center justify-between gap-3">
             <StatisticalEstimateNote>
               A statistical scenario, not a promise — and never saved to your record.
             </StatisticalEstimateNote>
+            <button type="button" className="btn-ghost shrink-0 border border-clock-line" onClick={save}>
+              + Save to compare
+            </button>
           </div>
+        </Card>
+      )}
+
+      {scenarios.length > 0 && (
+        <Card className="mt-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-clock-ink">Compare scenarios</h2>
+            <button type="button" className="btn-ghost text-clock-muted" onClick={() => setScenarios([])}>
+              Clear all
+            </button>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-clock-line text-left text-clock-muted">
+                <th className="py-2 font-medium">Change</th>
+                <th className="py-2 text-right font-medium">Effect</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scenarios.map((s) => {
+                const isBest = s.result.delta_years === bestDelta && bestDelta! > 0
+                const tone = deltaTone(s.result.delta_years)
+                return (
+                  <tr key={s.id} className={`border-b border-clock-line last:border-0 ${isBest ? 'bg-clock-good/5' : ''}`}>
+                    <td className="py-2 text-clock-ink">
+                      {s.summary}
+                      {isBest && (
+                        <span className="ml-2 rounded bg-clock-good/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-clock-good">
+                          best
+                        </span>
+                      )}
+                    </td>
+                    <td
+                      className={`py-2 text-right font-medium ${
+                        tone === 'good' ? 'text-clock-good' : tone === 'bad' ? 'text-clock-bad' : 'text-clock-muted'
+                      }`}
+                    >
+                      {fmtDelta(s.result.delta_years)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </Card>
       )}
     </div>

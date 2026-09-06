@@ -1,12 +1,15 @@
 import { Link } from 'react-router-dom'
 import { useProfile } from '../../app/profile'
+import { useBenchmark } from '../../api/hooks'
 import { LifeClock } from '../../components/LifeClock'
+import { Benchmark } from '../../components/Benchmark'
 import { IntervalBadge, StatisticalEstimateNote, SafeguardNote } from '../../components/framing'
 import { PageHeader, Card, NeedsProfile } from '../../components/ui'
 import { fmtYears } from '../../components/format'
 
 export function LifeClockPage() {
   const { profile, estimate } = useProfile()
+  const benchmark = useBenchmark(profile)
 
   if (!profile || !estimate) {
     return (
@@ -59,6 +62,17 @@ export function LifeClockPage() {
           </StatisticalEstimateNote>
         </Card>
       </div>
+
+      {benchmark.data && (
+        <Card className="mt-5">
+          <h2 className="mb-3 text-sm font-semibold text-clock-ink">How you compare</h2>
+          <Benchmark
+            estimateYears={estimate.estimate_years}
+            nationalAvgYears={benchmark.data.national_avg_years}
+            deltaYears={benchmark.data.delta_years}
+          />
+        </Card>
+      )}
 
       {belowCurrentAge && (
         <div className="mt-5">

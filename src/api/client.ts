@@ -7,6 +7,7 @@ import type {
   AnswerInput,
   AnswerRow,
   Attribution,
+  Benchmark,
   CalcRow,
   CohortStat,
   Estimate,
@@ -29,6 +30,7 @@ export interface ApiClient {
   saveAnswers(answers: AnswerInput[]): Promise<{ saved: number }>
 
   // ── Mock-only (surfaces ahead of their endpoints) ──
+  getBenchmark(profile: Profile): Promise<Benchmark>
   getWhy(profile: Profile): Promise<Attribution[]>
   getRecommendations(profile: Profile): Promise<Recommendation[]>
   listLocations(): Promise<Location[]>

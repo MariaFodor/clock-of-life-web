@@ -17,6 +17,12 @@ describe('<LifeClockPage/>', () => {
     expect(screen.getByText(/statistical estimate, not a/i)).toBeInTheDocument()
   })
 
+  it('shows the national-average benchmark comparison', async () => {
+    renderWithProviders(<LifeClockPage />, { profile: SAMPLE_PROFILE, estimate: SAMPLE_ESTIMATE })
+    expect(await screen.findByText(/how you compare/i)).toBeInTheDocument()
+    expect(screen.getByText(/the average person of your age and sex/i)).toBeInTheDocument()
+  })
+
   it('does not show the safeguard note for a normal estimate', () => {
     renderWithProviders(<LifeClockPage />, { profile: SAMPLE_PROFILE, estimate: SAMPLE_ESTIMATE })
     expect(screen.queryByText(/not a statement about you personally/i)).not.toBeInTheDocument()

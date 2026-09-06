@@ -146,6 +146,14 @@ export interface RelocateResult {
   explanation: string
 }
 
+/** How the user's estimate compares to the average person of the same age & sex (Life Clock surface). */
+export interface Benchmark {
+  /** average remaining years for the reference person at this age & sex (RR = 1) */
+  national_avg_years: number
+  /** user's estimate minus the national average (positive = above average) */
+  delta_years: number
+}
+
 /** Cohort aggregate for the Statistics surface — always k-gated (k ≥ 20). */
 export interface CohortStat {
   label: string

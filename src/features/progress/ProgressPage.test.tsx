@@ -19,4 +19,15 @@ describe('<ProgressPage/>', () => {
     expect(await screen.findByText(/range/i)).toBeInTheDocument()
     expect(screen.getByText(/reaches age/i)).toBeInTheDocument()
   })
+
+  it('shows a trend sparkline once there is more than one calculation', async () => {
+    const client = createMockClient()
+    await client.estimate(SAMPLE_PROFILE)
+    await client.estimate({ ...SAMPLE_PROFILE, smoke: 0 }) // a second, healthier snapshot
+    renderWithProviders(<ProgressPage />, { client })
+
+    expect(await screen.findByText(/your estimate over time/i)).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /estimate trend/i })).toBeInTheDocument()
+    expect(screen.getByText(/since first/i)).toBeInTheDocument()
+  })
 })

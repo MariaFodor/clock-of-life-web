@@ -1,7 +1,8 @@
 import { useCalculations } from '../../api/hooks'
 import { PageHeader, Card, Loading, ErrorState } from '../../components/ui'
 import { IntervalBadge, StatisticalEstimateNote } from '../../components/framing'
-import { fmtYears, fmtDate } from '../../components/format'
+import { Sparkline } from '../../components/Sparkline'
+import { fmtYears, fmtDate, fmtDelta, deltaTone } from '../../components/format'
 
 export function ProgressPage() {
   const query = useCalculations()
@@ -25,6 +26,35 @@ export function ProgressPage() {
           </Card>
         ) : (
           <div className="space-y-3">
+            {query.data.length > 1 &&
+              (() => {
+                // History is newest-first; plot chronologically (oldest → newest).
+                const chrono = query.data.slice().reverse()
+                const points = chrono.map((r) => ({
+                  value: r.estimate_years,
+                  low: r.interval_low,
+                  high: r.interval_high,
+                }))
+                const first = chrono[0].estimate_years
+                const last = chrono[chrono.length - 1].estimate_years
+                const trend = Math.round((last - first) * 10) / 10
+                const tone = deltaTone(trend)
+                return (
+                  <Card>
+                    <div className="mb-2 flex items-baseline justify-between">
+                      <h2 className="text-sm font-semibold text-clock-ink">Your estimate over time</h2>
+                      <span
+                        className={`text-sm font-medium ${
+                          tone === 'good' ? 'text-clock-good' : tone === 'bad' ? 'text-clock-bad' : 'text-clock-muted'
+                        }`}
+                      >
+                        {fmtDelta(trend)} since first
+                      </span>
+                    </div>
+                    <Sparkline points={points} />
+                  </Card>
+                )
+              })()}
             {query.data.map((row) => (
               <Card key={row.id} className="flex items-center justify-between gap-4">
                 <div>

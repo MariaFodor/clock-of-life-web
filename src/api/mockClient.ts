@@ -9,6 +9,7 @@ import type {
   AnswerInput,
   AnswerRow,
   Attribution,
+  Benchmark,
   CalcRow,
   CohortStat,
   Estimate,
@@ -20,7 +21,7 @@ import type {
   WhatIf,
   WhatIfChanges,
 } from './types'
-import { attributions, scoreEstimate, scoreWhatIf } from './mockScoring'
+import { attributions, averageRemainingYears, scoreEstimate, scoreWhatIf } from './mockScoring'
 
 const CONFIDENCE_WEIGHT = { strong: 1.0, moderate: 0.7, limited: 0.4 } as const
 
@@ -103,6 +104,12 @@ export function createMockClient(): ApiClient {
         })
       }
       return { saved: input.length }
+    },
+
+    async getBenchmark(profile: Profile): Promise<Benchmark> {
+      const avg = averageRemainingYears(profile.age, profile.sex)
+      const est = scoreEstimate(profile).estimate_years
+      return { national_avg_years: avg, delta_years: round1(est - avg) }
     },
 
     async getWhy(profile: Profile): Promise<Attribution[]> {

@@ -24,6 +24,21 @@ describe('<WhatIfPage/>', () => {
     expect(await screen.findByText(/cessation benefit accrues/i)).toBeInTheDocument()
   })
 
+  it('saves scenarios to a comparison board and marks the best', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+
+    // Simulate quitting smoking, then save it to compare.
+    await user.click(screen.getByRole('button', { name: 'Never' }))
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+    await user.click(await screen.findByRole('button', { name: /save to compare/i }))
+
+    expect(await screen.findByText(/compare scenarios/i)).toBeInTheDocument()
+    expect(screen.getByText(/smoking → Never/i)).toBeInTheDocument()
+    // A single positive scenario is the best.
+    expect(screen.getByText('best')).toBeInTheDocument()
+  })
+
   it('exposes only the modifiable levers as controls', () => {
     renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
     expect(screen.getByRole('slider', { name: /active minutes/i })).toBeInTheDocument()
