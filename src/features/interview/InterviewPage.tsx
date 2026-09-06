@@ -48,7 +48,7 @@ function Field({
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
                 selected
                   ? 'border-clock-brand bg-clock-brandsoft text-clock-brand'
-                  : 'border-clock-line bg-white text-clock-ink hover:border-clock-brand/40'
+                  : 'border-clock-line bg-clock-canvas text-clock-ink hover:border-clock-brand/40'
               }`}
             >
               {o.label}

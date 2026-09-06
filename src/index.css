@@ -73,7 +73,7 @@ body {
     @apply block text-sm font-medium text-clock-ink;
   }
   .field {
-    @apply w-full rounded-lg border border-clock-line bg-white px-3 py-2 text-sm
+    @apply w-full rounded-lg border border-clock-line bg-clock-canvas text-clock-ink px-3 py-2 text-sm
            focus:outline-none focus:ring-2 focus:ring-clock-brand/40;
   }
 }
