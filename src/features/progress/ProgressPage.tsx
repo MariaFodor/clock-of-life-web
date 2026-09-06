@@ -1,0 +1,49 @@
+import { useCalculations } from '../../api/hooks'
+import { PageHeader, Card, Loading, ErrorState } from '../../components/ui'
+import { IntervalBadge, StatisticalEstimateNote } from '../../components/framing'
+import { fmtYears, fmtDate } from '../../components/format'
+
+export function ProgressPage() {
+  const query = useCalculations()
+
+  return (
+    <div>
+      <PageHeader
+        title="My Progress"
+        subtitle="Every calculation you've run, newest first. Each is a saved snapshot on your account."
+      />
+
+      {query.isLoading && <Loading label="Loading your history…" />}
+      {query.isError && <ErrorState message={(query.error as Error).message} />}
+
+      {query.data && (
+        query.data.length === 0 ? (
+          <Card>
+            <p className="text-sm text-clock-muted">
+              No calculations yet. Run the interview to create your first snapshot.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {query.data.map((row) => (
+              <Card key={row.id} className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-medium text-clock-ink">{fmtYears(row.estimate_years)}</div>
+                  <div className="text-xs text-clock-muted">
+                    {fmtDate(row.created_at)} · reaches age {row.reaches_age.toFixed(0)} · RR{' '}
+                    {row.relative_risk.toFixed(2)}×
+                  </div>
+                </div>
+                <IntervalBadge low={row.interval_low} high={row.interval_high} />
+              </Card>
+            ))}
+            <StatisticalEstimateNote>
+              History lets you see how your estimate moves as your answers change — not a measurement of
+              your life, only of the model's view given what you told it.
+            </StatisticalEstimateNote>
+          </div>
+        )
+      )}
+    </div>
+  )
+}
