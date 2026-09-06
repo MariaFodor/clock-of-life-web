@@ -2,8 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* Colour tokens as RGB channels so Tailwind opacity utilities (bg-clock-good/10) keep working via
+   rgb(var(--token) / <alpha-value>). Light is a soft off-white system (surfaces are not stark white);
+   dark is a deep slate. Default follows the OS unless the user picks a theme (data-theme on <html>). */
+:root,
+:root[data-theme='light'] {
   color-scheme: light;
+  --clock-ink: 27 36 48;
+  --clock-muted: 91 107 123;
+  --clock-line: 221 226 234;
+  --clock-surface: 249 250 253;
+  --clock-canvas: 236 238 243;
+  --clock-brand: 43 108 176;
+  --clock-brandsoft: 230 238 248;
+  --clock-good: 47 133 90;
+  --clock-warn: 192 86 33;
+  --clock-bad: 197 48 48;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --clock-ink: 226 235 241;
+    --clock-muted: 154 168 184;
+    --clock-line: 38 48 60;
+    --clock-surface: 23 30 39;
+    --clock-canvas: 15 20 27;
+    --clock-brand: 108 173 226;
+    --clock-brandsoft: 28 42 58;
+    --clock-good: 72 187 120;
+    --clock-warn: 237 137 54;
+    --clock-bad: 245 101 101;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --clock-ink: 226 235 241;
+  --clock-muted: 154 168 184;
+  --clock-line: 38 48 60;
+  --clock-surface: 23 30 39;
+  --clock-canvas: 15 20 27;
+  --clock-brand: 108 173 226;
+  --clock-brandsoft: 28 42 58;
+  --clock-good: 72 187 120;
+  --clock-warn: 237 137 54;
+  --clock-bad: 245 101 101;
 }
 
 body {

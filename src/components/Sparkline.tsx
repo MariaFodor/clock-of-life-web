@@ -49,11 +49,18 @@ export function Sparkline({
     : null
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} role="img" aria-label="Estimate trend over time" preserveAspectRatio="none">
-      {band && <path d={band} fill="#2b6cb0" fillOpacity={0.12} />}
-      <path d={line} fill="none" stroke="#2b6cb0" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+    // Uniform scaling (default preserveAspectRatio) keeps the markers round and the stroke even; the SVG
+    // sizes to its container width via CSS while preserving aspect ratio.
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label="Estimate trend over time"
+      style={{ width: '100%', height: 'auto' }}
+    >
+      {band && <path d={band} fill="rgb(var(--clock-brand))" fillOpacity={0.12} />}
+      <path d={line} fill="none" stroke="rgb(var(--clock-brand))" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       {points.map((p, i) => (
-        <circle key={i} cx={x(i)} cy={y(p.value)} r={i === points.length - 1 ? 4 : 2.5} fill="#2b6cb0" />
+        <circle key={i} cx={x(i)} cy={y(p.value)} r={i === points.length - 1 ? 4 : 2.5} fill="rgb(var(--clock-brand))" />
       ))}
     </svg>
   )

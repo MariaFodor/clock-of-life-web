@@ -72,10 +72,11 @@ export function LifeClock({ age, estimateYears, reachesAge, interval, compact = 
   const fIntLow = Math.min(1, (age + interval[0]) / max)
   const fIntHigh = Math.min(1, (age + interval[1]) / max)
 
-  // Draw-in animation: `anim` runs 0→1, growing each arc from its start; the centre number counts up.
-  // Both collapse to their final value immediately when the viewer prefers reduced motion.
+  // Draw-in animation: a single `anim` progress (0→1) grows each arc from its start and drives the
+  // centre number count-up, so everything animates in lockstep. It resolves to 1 immediately when the
+  // viewer prefers reduced motion.
   const anim = useCountUp(1, 950)
-  const shownYears = useCountUp(estimateYears, 950)
+  const shownYears = estimateYears * anim
   const grow = (from: number, to: number) => from + (to - from) * anim
 
   const dim = compact ? 168 : 240
@@ -91,13 +92,13 @@ export function LifeClock({ age, estimateYears, reachesAge, interval, compact = 
         aria-label={`Estimated ${estimateYears.toFixed(1)} more years, reaching about age ${reachesAge.toFixed(0)}. Uncertainty range ${fmtYears(interval[0])} to ${fmtYears(interval[1])}.`}
       >
         {/* full track */}
-        <Arc from={0} to={1} color="#e3e8ee" width={TRACK_W} rounded={false} />
+        <Arc from={0} to={1} color="rgb(var(--clock-line))" width={TRACK_W} rounded={false} />
         {/* uncertainty band at the frontier (always shown) */}
-        <Arc from={grow(fLived, fIntLow)} to={grow(fLived, fIntHigh)} color="#2b6cb0" width={BAND_W} opacity={0.18} rounded={false} />
+        <Arc from={grow(fLived, fIntLow)} to={grow(fLived, fIntHigh)} color="rgb(var(--clock-brand))" width={BAND_W} opacity={0.18} rounded={false} />
         {/* life lived */}
-        <Arc from={0} to={grow(0, fLived)} color="#9aa8b8" width={TRACK_W} />
+        <Arc from={0} to={grow(0, fLived)} color="rgb(var(--clock-muted))" width={TRACK_W} />
         {/* estimated remaining */}
-        <Arc from={fLived} to={grow(fLived, fReaches)} color={belowCurrentAge ? '#c05621' : '#2b6cb0'} width={TRACK_W} />
+        <Arc from={fLived} to={grow(fLived, fReaches)} color={belowCurrentAge ? 'rgb(var(--clock-warn))' : 'rgb(var(--clock-brand))'} width={TRACK_W} />
 
         {/* centre readout */}
         <text x={C} y={C - 14} textAnchor="middle" className="fill-clock-muted" style={{ fontSize: 13 }}>

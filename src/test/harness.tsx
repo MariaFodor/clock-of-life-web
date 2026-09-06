@@ -9,6 +9,7 @@ import { provideClient, type ApiClient } from '../api/client'
 import { createMockClient } from '../api/mockClient'
 import { AuthProvider } from '../app/auth'
 import { ProfileProvider } from '../app/profile'
+import { ThemeProvider } from '../app/theme'
 import type { Estimate, Profile } from '../api/types'
 
 export const SAMPLE_PROFILE: Profile = {
@@ -58,11 +59,13 @@ export function renderWithProviders(ui: ReactElement, opts: Options = {}) {
         initialEntries={[opts.route ?? '/']}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
-        <AuthProvider>
-          <ProfileProvider initialProfile={opts.profile ?? null} initialEstimate={opts.estimate ?? null}>
-            {children}
-          </ProfileProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ProfileProvider initialProfile={opts.profile ?? null} initialEstimate={opts.estimate ?? null}>
+              {children}
+            </ProfileProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </MemoryRouter>
     </QueryClientProvider>
   )

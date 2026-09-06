@@ -10,18 +10,20 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Calm, clinical palette — this is a health tool, not a game.
+        // Calm, clinical palette — this is a health tool, not a game. Values are CSS tokens (see
+        // index.css) so the whole palette swaps between light and dark themes; the rgb(... / <alpha-value>)
+        // form keeps Tailwind's opacity modifiers (e.g. bg-clock-good/10) working.
         clock: {
-          ink: '#1b2430', // near-black text
-          muted: '#5b6b7b', // secondary text
-          line: '#e3e8ee', // hairlines / borders
-          surface: '#ffffff',
-          canvas: '#f6f8fb', // page background
-          brand: '#2b6cb0', // primary (deep blue)
-          brandsoft: '#ebf3fb',
-          good: '#2f855a', // gains (green)
-          warn: '#c05621', // caution (amber)
-          bad: '#c53030', // losses (red)
+          ink: 'rgb(var(--clock-ink) / <alpha-value>)',
+          muted: 'rgb(var(--clock-muted) / <alpha-value>)',
+          line: 'rgb(var(--clock-line) / <alpha-value>)',
+          surface: 'rgb(var(--clock-surface) / <alpha-value>)',
+          canvas: 'rgb(var(--clock-canvas) / <alpha-value>)',
+          brand: 'rgb(var(--clock-brand) / <alpha-value>)',
+          brandsoft: 'rgb(var(--clock-brandsoft) / <alpha-value>)',
+          good: 'rgb(var(--clock-good) / <alpha-value>)',
+          warn: 'rgb(var(--clock-warn) / <alpha-value>)',
+          bad: 'rgb(var(--clock-bad) / <alpha-value>)',
         },
       },
       fontFamily: {

@@ -6,6 +6,7 @@ import { App } from './app/App'
 import { createQueryClient } from './app/queryClient'
 import { AuthProvider } from './app/auth'
 import { ProfileProvider } from './app/profile'
+import { ThemeProvider } from './app/theme'
 import { provideClient } from './api/client'
 import { createMockClient } from './api/mockClient'
 import './index.css'
@@ -20,11 +21,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AuthProvider>
-          <ProfileProvider>
-            <App />
-          </ProfileProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ProfileProvider>
+              <App />
+            </ProfileProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>,

@@ -1,9 +1,11 @@
 import { NavLink } from 'react-router-dom'
 import { NAV_ITEMS } from './nav'
 import { useAuth } from './auth'
+import { useTheme } from './theme'
 
 export function Sidebar() {
   const { session, logout } = useAuth()
+  const { theme, toggle } = useTheme()
   return (
     <nav
       aria-label="Primary"
@@ -43,6 +45,17 @@ export function Sidebar() {
       </ul>
 
       <div className="border-t border-clock-line px-5 py-4">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-pressed={theme === 'dark'}
+          className="mb-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-clock-ink hover:bg-clock-canvas"
+        >
+          <span aria-hidden className="w-4 text-center">
+            {theme === 'dark' ? '☀' : '☾'}
+          </span>
+          {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+        </button>
         {session && (
           <div className="mb-2 truncate text-xs text-clock-muted" title={session.handle}>
             Signed in as <span className="font-medium text-clock-ink">{session.handle}</span>
