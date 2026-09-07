@@ -20,6 +20,8 @@ export const SAMPLE_PROFILE: Profile = {
   pa_min: 400,
   sleep: 7.5,
   waist: 102,
+  bmi: 29.4,
+  cigs_day: 15,
   diabetes: true,
   high_bp: false,
   respiratory: false,

@@ -3,7 +3,9 @@
 // Every question carries its user-facing wording, its "why we ask", and — where the v1 model scores it —
 // how it maps into the Profile. Questions the v1 model does not yet score (diet, alcohol, stress, mood,
 // location) are still asked and persisted via /api/answers; they are flagged `scored: false` so the UI
-// can be honest that they don't move the current estimate.
+// can be honest that they don't move the current estimate. (v2.1 added BMI from height+weight, a
+// current-smoking dose from CIGS, and an optional systolic-BP reading — clock_dev EXP-14, +0.027
+// out-of-sample C-index. SBP is optional: blank → the service derives it from the high-BP answer.)
 
 import type { Profile } from '../../api/types'
 
@@ -80,7 +82,7 @@ export const SECTIONS: Section[] = [
       ] },
       { code: 'YEARS_QUIT', prompt: 'In what year did you quit?', type: 'number', unit: 'year', scored: false,
         showWhen: (a) => a.SMK === 'former' },
-      { code: 'CIGS', prompt: 'On the days you smoked, about how many cigarettes per day?', type: 'number', scored: false,
+      { code: 'CIGS', prompt: 'On the days you smoked, about how many cigarettes per day?', type: 'number', scored: true,
         showWhen: (a) => a.SMK === 'former' || a.SMK === 'current' },
     ],
   },
@@ -122,10 +124,12 @@ export const SECTIONS: Section[] = [
   },
   {
     title: 'Body',
-    whyWeAsk: 'Where you carry weight (your waistline) tracks health better than weight alone.',
+    whyWeAsk: 'Your waistline shows where you carry weight; height and weight together (your BMI) add a separate signal — a low BMI with a high waist can flag frailty.',
     confidence: 'high',
     questions: [
       { code: 'WAIST', prompt: 'What is your waist measurement, taken around the belly button?', type: 'number', unit: 'cm', scored: true },
+      { code: 'HEIGHT', prompt: 'How tall are you?', type: 'number', unit: 'cm', scored: true },
+      { code: 'WEIGHT', prompt: 'What is your weight?', type: 'number', unit: 'kg', scored: true },
     ],
   },
   {
@@ -186,6 +190,7 @@ export const SECTIONS: Section[] = [
         { value: 'cvd', label: 'Heart attack, stroke, or heart failure' },
         { value: 'cancer', label: 'I have had cancer' },
       ] },
+      { code: 'SBP', prompt: 'If you know it, what is your systolic (top) blood pressure? Leave blank if unsure.', type: 'number', unit: 'mmHg', scored: true },
     ],
   },
   {
@@ -221,6 +226,8 @@ export const DEFAULT_ANSWERS: Answers = {
   SEDENTARY: '6-8',
   SLEEP: '7-8',
   WAIST: 88,
+  HEIGHT: 170,
+  WEIGHT: 75,
   ALC: 'light',
   AREA: 'city',
   COND: [],
@@ -243,7 +250,21 @@ export function buildProfile(a: Answers): ProfileDraft {
   const waist = num(a.WAIST)
   if (!Number.isFinite(waist) || waist < 40 || waist > 250) errors.push('Waist must be between 40 and 250 cm.')
 
+  const height = num(a.HEIGHT)
+  if (!Number.isFinite(height) || height < 120 || height > 230) errors.push('Height must be between 120 and 230 cm.')
+  const weight = num(a.WEIGHT)
+  if (!Number.isFinite(weight) || weight < 30 || weight > 300) errors.push('Weight must be between 30 and 300 kg.')
+  const bmi = weight / ((height / 100) ** 2)
+
   const smoke = a.SMK === 'current' ? 2 : a.SMK === 'former' ? 1 : 0
+  // Current-smoker dose only: former/never smoke 0/day now (matches the model's cigs_day encoding).
+  const cigs_day = smoke === 2 ? Math.min(Math.max(num(a.CIGS) || 0, 0), 80) : 0
+
+  // Systolic BP is optional: only sent when the user gives a plausible reading; otherwise the service
+  // derives it from the high-blood-pressure answer, so a blank field is never a wasted question.
+  const sbpRaw = a.SBP
+  const sbp = (sbpRaw !== undefined && sbpRaw !== '' && Number.isFinite(num(sbpRaw))) ? num(sbpRaw) : undefined
+  if (sbp !== undefined && (sbp < 70 || sbp > 240)) errors.push('Blood pressure must be between 70 and 240 mmHg.')
 
   const days = num(a.ACT_DAYS) || 0
   const perDay = ACT_MIN_MID[String(a.ACT_MIN)] ?? 30
@@ -260,6 +281,9 @@ export function buildProfile(a: Answers): ProfileDraft {
     pa_min,
     sleep: SLEEP_HOURS[String(a.SLEEP)] ?? 7.5,
     waist,
+    bmi,
+    cigs_day,
+    ...(sbp !== undefined ? { sbp } : {}),
     diabetes: cond.includes('diabetes'),
     high_bp: cond.includes('hbp'),
     respiratory: cond.includes('resp'),

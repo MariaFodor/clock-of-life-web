@@ -23,6 +23,12 @@ export interface Profile {
   sleep: number
   /** cm */
   waist: number
+  /** body-mass index (kg/m²), from height + weight */
+  bmi: number
+  /** current-smoker cigarettes/day (0 if not a current smoker) */
+  cigs_day?: number
+  /** systolic blood pressure (mmHg) if known; omitted → service derives it from high_bp */
+  sbp?: number
   diabetes?: boolean
   high_bp?: boolean
   respiratory?: boolean
