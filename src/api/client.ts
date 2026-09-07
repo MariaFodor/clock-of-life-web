@@ -7,6 +7,7 @@ import type {
   AnswerInput,
   AnswerRow,
   Attribution,
+  AuthResult,
   Benchmark,
   CalcRow,
   CohortStat,
@@ -21,6 +22,10 @@ import type {
 } from './types'
 
 export interface ApiClient {
+  // ── Auth (pseudonymous accounts) ──
+  register(email: string, password: string, locale?: string): Promise<AuthResult>
+  login(email: string, password: string): Promise<AuthResult>
+
   // ── Live service contract (clock-of-life-service) ──
   getMeta(): Promise<Meta>
   estimate(profile: Profile): Promise<Estimate>

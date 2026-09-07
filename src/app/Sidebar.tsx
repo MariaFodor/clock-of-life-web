@@ -57,8 +57,8 @@ export function Sidebar() {
           {theme === 'dark' ? 'Light mode' : 'Dark mode'}
         </button>
         {session && (
-          <div className="mb-2 truncate text-xs text-clock-muted" title={session.handle}>
-            Signed in as <span className="font-medium text-clock-ink">{session.handle}</span>
+          <div className="mb-2 truncate text-xs text-clock-muted" title={session.email}>
+            Signed in as <span className="font-medium text-clock-ink">{session.email}</span>
           </div>
         )}
         <button type="button" onClick={logout} className="btn-ghost w-full justify-start px-0 text-clock-muted">

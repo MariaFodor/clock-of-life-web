@@ -52,6 +52,13 @@ export function createMockClient(): ApiClient {
   let seq = 0
 
   return {
+    async register(email: string): Promise<{ token: string; account_id: string }> {
+      return { token: `mock-token-${mockId(email)}`, account_id: mockId(`acct-${email}`) }
+    },
+    async login(email: string): Promise<{ token: string; account_id: string }> {
+      return { token: `mock-token-${mockId(email)}`, account_id: mockId(`acct-${email}`) }
+    },
+
     async getMeta(): Promise<Meta> {
       return {
         model_version: '2.0.0',

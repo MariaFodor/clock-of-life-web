@@ -8,12 +8,13 @@ import { AuthProvider } from './app/auth'
 import { ProfileProvider } from './app/profile'
 import { ThemeProvider } from './app/theme'
 import { provideClient } from './api/client'
+import { createHttpClient } from './api/httpClient'
 import { createMockClient } from './api/mockClient'
 import './index.css'
 
-// Until the generated OpenAPI client lands (ARCH-04), the app runs against the in-memory mock. Swapping
-// to the real client is a one-line change here — pages and hooks go through the same seam.
-provideClient(createMockClient())
+// Real backend by default (clock-of-life-service via the /api proxy); set VITE_USE_MOCK=1 to run the
+// in-memory mock instead. Same ApiClient seam either way, so pages and hooks are unchanged.
+provideClient(import.meta.env.VITE_USE_MOCK === '1' ? createMockClient() : createHttpClient())
 
 const queryClient = createQueryClient()
 

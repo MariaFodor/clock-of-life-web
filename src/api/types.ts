@@ -37,6 +37,10 @@ export interface Profile {
   higher_educ?: boolean
   /** income-to-poverty ratio (default 2.5) */
   income?: number
+  /** home annual-mean PM2.5 (µg/m³), from the user's location (RES-04); omitted → ENV neutral */
+  pm25?: number
+  /** home greenspace NDVI, from the user's location; omitted → ENV neutral */
+  ndvi?: number
 }
 
 /** scoring.rs `Estimate` + the persisted calculation id (lib.rs `EstimateResponse`). */
@@ -64,6 +68,12 @@ export interface WhatIf {
   delta_years: number
   note?: string
   scenario_id?: string
+}
+
+/** POST /api/auth/register and /api/auth/login response. */
+export interface AuthResult {
+  token: string
+  account_id: string
 }
 
 /** GET /api/meta. */
