@@ -17,6 +17,9 @@ const STD: Record<string, Standardizer> = {
   activity: { mean: 6.0, sd: 1.3 }, // ln(MET-min/week + 1)
   waist: { mean: 94, sd: 13 },
   income: { mean: 2.5, sd: 1.2 },
+  bmi: { mean: 28.9, sd: 6.7 },       // kg/m²
+  cigs_day: { mean: 2.6, sd: 6.7 },   // current-smoker cigarettes/day
+  sbp: { mean: 123, sd: 18 },         // systolic BP (mmHg)
 }
 const z = (raw: number, key: string) => (raw - STD[key].mean) / STD[key].sd
 
@@ -27,6 +30,9 @@ const BETA: Record<string, number> = {
   activity: -0.13, // per z; more activity lowers risk
   sleep_long: 0.09,
   waist: 0.16,
+  bmi: -0.12,        // per z; adds to waist — low-BMI-high-waist reads as frailty risk (illustrative)
+  cigs_day: 0.1,     // per z; heavier current smoking shortens further (illustrative)
+  sbp: 0.22,         // per z; higher systolic BP shortens life (illustrative)
   diabetes: 0.45,
   high_bp: 0.2,
   respiratory: 0.42,
@@ -45,6 +51,9 @@ export const REFERENCE_PROFILE: Profile = {
   pa_min: 600,
   sleep: 7,
   waist: 94,
+  bmi: 28.9,
+  cigs_day: 0,
+  sbp: 123, // cohort-mean systolic BP → reference z = 0
   diabetes: false,
   high_bp: false,
   respiratory: false,
@@ -62,6 +71,10 @@ function design(p: Profile): Record<string, number> {
     activity: z(Math.log(p.pa_min + 1), 'activity'),
     sleep_long: p.sleep >= 8.5 ? 1 : 0,
     waist: z(p.waist, 'waist'),
+    bmi: z(p.bmi, 'bmi'),
+    cigs_day: z(p.smoke === 2 ? (p.cigs_day ?? 0) : 0, 'cigs_day'),
+    // Real reading if known, else derived from the high-BP answer (matches scoring.rs).
+    sbp: z(p.sbp ?? (p.high_bp ? 132.7 : 117.9), 'sbp'),
     diabetes: p.diabetes ? 1 : 0,
     high_bp: p.high_bp ? 1 : 0,
     respiratory: p.respiratory ? 1 : 0,
