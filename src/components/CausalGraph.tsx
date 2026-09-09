@@ -105,7 +105,10 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
       <div className="overflow-x-auto">
         <svg
           viewBox={`0 0 ${width} ${height}`}
-          className="min-w-[680px] w-full"
+          // The viewBox is as wide as the graph is deep (7 columns on the real ontology), so the minimum
+          // width has to follow it — otherwise a phone squeezes 1276 units into 375px and the labels
+          // render at ~6px. The wrapper already scrolls horizontally.
+          className="min-w-[1180px] w-full"
           role="group"
           aria-label="Causal graph: how each factor reaches your estimate, and what it acts through"
         >

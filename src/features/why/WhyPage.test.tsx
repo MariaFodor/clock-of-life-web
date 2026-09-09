@@ -35,12 +35,16 @@ describe('<WhyPage/>', () => {
   })
 
   it('never labels a marker as something you can change', async () => {
-    renderWithProviders(<WhyPage />, { profile: SAMPLE_PROFILE })
+    // sleep 10 makes long sleep appear in the breakdown. With SAMPLE_PROFILE's 7.5 it never does,
+    // so the assertion below would never run — the test would pass with the marker role deleted.
+    renderWithProviders(<WhyPage />, { profile: { ...SAMPLE_PROFILE, sleep: 10 } })
     const breakdown = await screen.findByTestId('why-breakdown')
-    const sleep = within(breakdown).queryByText('Long sleep')
-    if (sleep) {
-      const row = sleep.closest('li, div') as HTMLElement
-      expect(within(row).queryByText(/you can change this/i)).toBeNull()
-    }
+    await within(breakdown).findByText('Long sleep')
+    // The role label sits in the factor's row; assert within the breakdown card, since the row
+    // wrapper is a grid whose closest ancestor div is only part of it.
+    expect(within(breakdown).getByText(/a sign, not a cause/i)).toBeInTheDocument()
+    // And long sleep must not be advertised as changeable anywhere in the breakdown.
+    const sleepRow = within(breakdown).getByText('Long sleep').parentElement as HTMLElement
+    expect(within(sleepRow).queryByText(/you can change this/i)).toBeNull()
   })
 })
