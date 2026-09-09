@@ -6,6 +6,7 @@
 // are identical against either.
 
 import type { ApiClient } from './client'
+import { EVIDENCE_GRADES } from './types'
 import type {
   AnswerInput,
   AnswerRow,
@@ -56,8 +57,10 @@ const post = <T>(path: string, body: unknown, skipAuth = false) =>
 const get = <T>(path: string) => request<T>(path)
 
 // ── mapping helpers ───────────────────────────────────────────────────────────
+// Conservative by construction: an unknown or missing grade is shown as ungraded ('na'),
+// never promoted to a stronger-looking one (REVIEW-2026-09-09 W3).
 const asGrade = (g: string | null | undefined): EvidenceGrade =>
-  g === 'strong' || g === 'moderate' || g === 'limited' ? g : 'moderate'
+  (EVIDENCE_GRADES as readonly string[]).includes(g ?? '') ? (g as EvidenceGrade) : 'na'
 
 const asRole = (r: string): FactorRole =>
   r === 'lever' || r === 'manage' || r === 'context' || r === 'baseline' ? r : 'context'

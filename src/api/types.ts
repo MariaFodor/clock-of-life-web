@@ -116,7 +116,9 @@ export interface AnswerInput {
 // Shaped to match the design docs (api-and-scoring.md transparent payload, web-architecture.md) so the
 // real endpoints can drop in later.
 
-export type EvidenceGrade = 'strong' | 'moderate' | 'limited'
+// Matches the service vocabulary (seeds/features.json): never invent or upgrade a grade.
+export const EVIDENCE_GRADES = ['strong', 'moderate', 'weak', 'na'] as const
+export type EvidenceGrade = (typeof EVIDENCE_GRADES)[number]
 export type FactorRole = 'lever' | 'manage' | 'context' | 'baseline'
 
 /** One row of the "Why?" breakdown (api-and-scoring.md `why[]`, extended with role for framing). */

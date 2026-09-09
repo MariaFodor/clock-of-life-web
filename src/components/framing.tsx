@@ -42,14 +42,22 @@ export function SafeguardNote() {
 const GRADE_STYLE: Record<EvidenceGrade, string> = {
   strong: 'bg-clock-good/10 text-clock-good',
   moderate: 'bg-clock-brand/10 text-clock-brand',
-  limited: 'bg-clock-warn/10 text-clock-warn',
+  weak: 'bg-clock-warn/10 text-clock-warn',
+  na: 'bg-clock-canvas text-clock-muted',
+}
+
+const GRADE_LABEL: Record<EvidenceGrade, string> = {
+  strong: 'strong evidence',
+  moderate: 'moderate evidence',
+  weak: 'weak evidence',
+  na: 'ungraded',
 }
 
 /** Evidence grade chip — every attributed factor carries its grade. */
 export function EvidenceChip({ grade }: { grade: EvidenceGrade }) {
   return (
     <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${GRADE_STYLE[grade]}`}>
-      {grade} evidence
+      {GRADE_LABEL[grade]}
     </span>
   )
 }

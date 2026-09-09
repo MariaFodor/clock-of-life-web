@@ -23,7 +23,7 @@ import type {
 } from './types'
 import { attributions, averageRemainingYears, scoreEstimate, scoreWhatIf } from './mockScoring'
 
-const CONFIDENCE_WEIGHT = { strong: 1.0, moderate: 0.7, limited: 0.4 } as const
+const CONFIDENCE_WEIGHT = { strong: 1.0, moderate: 0.7, weak: 0.4, na: 0.2 } as const
 
 const LOCATIONS: Location[] = [
   { id: 'bucuresti', name: 'Bucharest', pm25: 19.4, ndvi: 0.34, kind: 'city' },
