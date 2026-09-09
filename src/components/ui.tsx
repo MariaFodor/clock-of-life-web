@@ -12,8 +12,20 @@ export function PageHeader({ title, subtitle }: { title: string; subtitle?: stri
   )
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`card p-5 ${className}`}>{children}</section>
+export function Card({
+  children,
+  className = '',
+  testId,
+}: {
+  children: ReactNode
+  className?: string
+  testId?: string
+}) {
+  return (
+    <section className={`card p-5 ${className}`} data-testid={testId}>
+      {children}
+    </section>
+  )
 }
 
 export function Loading({ label = 'Loading…' }: { label?: string }) {

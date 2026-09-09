@@ -141,7 +141,8 @@ export interface Attribution {
   factor: string
   delta_years: number
   evidence: EvidenceGrade
-  role: FactorRole
+  /** `marker` factors predict and explain but are never recommended (e.g. long sleep, mobility). */
+  role: FactorRole | 'marker'
   citation: string
   /** Resolvable link to the paper behind this factor, verified when the ontology was written. */
   url?: string

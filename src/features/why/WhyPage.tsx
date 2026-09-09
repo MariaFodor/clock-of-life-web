@@ -11,6 +11,7 @@ const ROLE_LABEL: Record<string, string> = {
   lever: 'you can change this',
   manage: 'manage the condition',
   context: 'context — explained, not a target',
+  marker: 'a sign, not a cause — explained, never recommended',
   baseline: 'baseline',
 }
 
@@ -51,7 +52,7 @@ export function WhyPage() {
       )}
 
       {query.data && (
-        <Card>
+        <Card testId="why-breakdown">
           {query.data.length === 0 ? (
             <p className="text-sm text-clock-muted">Your answers sit close to the average across the board.</p>
           ) : (

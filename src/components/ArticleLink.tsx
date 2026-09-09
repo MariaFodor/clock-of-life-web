@@ -17,7 +17,18 @@ export function ArticleLink({
   year?: number
   citation?: string
 }) {
-  const href = url ?? (doi ? `https://doi.org/${doi}` : undefined)
+  // Only http(s). React warns on a `javascript:` href but does not block it, and this value comes
+  // from a model artifact rather than from us — so it is validated here, not trusted.
+  const safeUrl = (() => {
+    if (!url) return undefined
+    try {
+      const u = new URL(url)
+      return u.protocol === 'https:' || u.protocol === 'http:' ? url : undefined
+    } catch {
+      return undefined
+    }
+  })()
+  const href = safeUrl ?? (doi ? `https://doi.org/${encodeURIComponent(doi)}` : undefined)
   const label = firstAuthor && year ? `${firstAuthor} ${year}` : (citation ?? 'source')
 
   if (!href) {

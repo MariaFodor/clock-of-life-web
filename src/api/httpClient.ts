@@ -68,8 +68,10 @@ const asGrade = (g: string | null | undefined): EvidenceGrade =>
       ? (g as EvidenceGrade)
       : 'na'
 
-const asRole = (r: string): FactorRole =>
-  r === 'lever' || r === 'manage' || r === 'context' || r === 'baseline' ? r : 'context'
+const asRole = (r: string): FactorRole | 'marker' =>
+  r === 'lever' || r === 'manage' || r === 'context' || r === 'baseline' || r === 'marker'
+    ? r
+    : 'context'
 
 const round1 = (x: number) => Math.round(x * 10) / 10
 

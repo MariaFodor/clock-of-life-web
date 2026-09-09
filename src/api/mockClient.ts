@@ -187,7 +187,7 @@ export function createMockClient(): ApiClient {
 
       if (profile.smoke === 2) {
         push({
-          factor: 'Smoking',
+          factor: 'smk_current',
           role: 'lever',
           headline: 'Stop smoking',
           detail: 'The single largest modifiable factor. Benefit builds over roughly ten years.',
@@ -198,7 +198,7 @@ export function createMockClient(): ApiClient {
       }
       if (profile.pa_min < 900) {
         push({
-          factor: 'Physical activity',
+          factor: 'activity',
           role: 'lever',
           headline: 'Move more — aim for ~150 active minutes a week',
           detail: 'Brisk walking, cycling, or sport most days. Even modest increases help.',
@@ -209,7 +209,7 @@ export function createMockClient(): ApiClient {
       }
       if (profile.waist > 94) {
         push({
-          factor: 'Waist circumference',
+          factor: 'waist',
           role: 'lever',
           headline: 'Reduce your waistline',
           detail: 'Where you carry weight tracks health better than weight alone.',
@@ -220,7 +220,7 @@ export function createMockClient(): ApiClient {
       }
       if (profile.diabetes) {
         push({
-          factor: 'Diabetes',
+          factor: 'diabetes',
           role: 'manage',
           headline: 'Keep your diabetes well-controlled',
           detail: 'We never suggest undoing a diagnosis — managing it well protects the years ahead.',
@@ -231,7 +231,7 @@ export function createMockClient(): ApiClient {
       }
       if (profile.high_bp) {
         push({
-          factor: 'High blood pressure',
+          factor: 'high_bp',
           role: 'manage',
           headline: 'Keep your blood pressure in range',
           detail: 'Regular monitoring and treatment adherence.',
