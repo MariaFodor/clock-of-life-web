@@ -250,28 +250,32 @@ interface FactorSpec {
   role: FactorRole
   evidence: EvidenceGrade
   citation: string
+  /** verified DOI of the paper behind this factor — the real service always sends one */
+  doi: string
+  firstAuthor: string
+  year: number
   /** produce a copy of the profile with this factor set to the reference value */
   toReference: (p: Profile) => Profile
 }
 
 const FACTORS: FactorSpec[] = [
-  { key: 'smk_current', factor: 'Smoking', role: 'lever', evidence: 'strong', citation: 'RES-02 · GBD 2019 tobacco', toReference: (p) => ({ ...p, smoke: 0 }) },
-  { key: 'activity', factor: 'Physical activity', role: 'lever', evidence: 'strong', citation: 'RES-03 · IPAQ / Arem 2015', toReference: (p) => ({ ...p, pa_min: REFERENCE_PROFILE.pa_min }) },
-  { key: 'waist', factor: 'Waist circumference', role: 'lever', evidence: 'moderate', citation: 'RES-03 · EXP-12 total effect', toReference: (p) => ({ ...p, waist: REFERENCE_PROFILE.waist }) },
-  { key: 'sleep_long', factor: 'Long sleep', role: 'lever', evidence: 'weak', citation: 'RES-02 · EXP-12', toReference: (p) => ({ ...p, sleep: 7 }) },
-  { key: 'diabetes', factor: 'Diabetes', role: 'manage', evidence: 'strong', citation: 'RES-02', toReference: (p) => ({ ...p, diabetes: false }) },
-  { key: 'high_bp', factor: 'High blood pressure', role: 'manage', evidence: 'strong', citation: 'RES-02', toReference: (p) => ({ ...p, high_bp: false }) },
-  { key: 'respiratory', factor: 'Respiratory disease', role: 'manage', evidence: 'moderate', citation: 'RES-02', toReference: (p) => ({ ...p, respiratory: false }) },
-  { key: 'cvd_hx', factor: 'Cardiovascular history', role: 'context', evidence: 'strong', citation: 'RES-02', toReference: (p) => ({ ...p, cvd_hx: false }) },
-  { key: 'cancer_hx', factor: 'Cancer history', role: 'context', evidence: 'moderate', citation: 'RES-02', toReference: (p) => ({ ...p, cancer_hx: false }) },
-  { key: 'education', factor: 'Education', role: 'context', evidence: 'moderate', citation: 'RES-02 · SES', toReference: (p) => ({ ...p, higher_educ: REFERENCE_PROFILE.higher_educ }) },
-  { key: 'income', factor: 'Income', role: 'context', evidence: 'moderate', citation: 'RES-02 · SES', toReference: (p) => ({ ...p, income: REFERENCE_PROFILE.income }) },
+  { key: 'smk_current', factor: 'Smoking', role: 'lever', evidence: 'strong', citation: 'RES-02 · GBD 2019 tobacco', doi: '10.1056/NEJMsa1211128', firstAuthor: 'Jha', year: 2013, toReference: (p) => ({ ...p, smoke: 0 }) },
+  { key: 'activity', factor: 'Physical activity', role: 'lever', evidence: 'strong', citation: 'RES-03 · IPAQ / Arem 2015', doi: '10.1001/jamainternmed.2015.0533', firstAuthor: 'Arem', year: 2015, toReference: (p) => ({ ...p, pa_min: REFERENCE_PROFILE.pa_min }) },
+  { key: 'waist', factor: 'Waist circumference', role: 'lever', evidence: 'moderate', citation: 'RES-03 · EXP-12 total effect', doi: '10.1136/bmj.m3324', firstAuthor: 'Jayedi', year: 2020, toReference: (p) => ({ ...p, waist: REFERENCE_PROFILE.waist }) },
+  { key: 'sleep_long', factor: 'Long sleep', role: 'lever', evidence: 'weak', citation: 'RES-02 · EXP-12', doi: '10.1093/sleep/33.5.585', firstAuthor: 'Cappuccio', year: 2010, toReference: (p) => ({ ...p, sleep: 7 }) },
+  { key: 'diabetes', factor: 'Diabetes', role: 'manage', evidence: 'strong', citation: 'RES-02', doi: '10.1056/NEJMoa1008862', firstAuthor: 'Emerging Risk Factors Collaboration', year: 2011, toReference: (p) => ({ ...p, diabetes: false }) },
+  { key: 'high_bp', factor: 'High blood pressure', role: 'manage', evidence: 'strong', citation: 'RES-02', doi: '10.1016/S0140-6736(02)11911-8', firstAuthor: 'Prospective Studies Collaboration', year: 2002, toReference: (p) => ({ ...p, high_bp: false }) },
+  { key: 'respiratory', factor: 'Respiratory disease', role: 'manage', evidence: 'moderate', citation: 'RES-02', doi: '10.1183/09031936.06.00124605', firstAuthor: 'Halbert', year: 2006, toReference: (p) => ({ ...p, respiratory: false }) },
+  { key: 'cvd_hx', factor: 'Cardiovascular history', role: 'context', evidence: 'strong', citation: 'RES-02', doi: '10.1001/jama.2015.7008', firstAuthor: 'Di Angelantonio', year: 2015, toReference: (p) => ({ ...p, cvd_hx: false }) },
+  { key: 'cancer_hx', factor: 'Cancer history', role: 'context', evidence: 'moderate', citation: 'RES-02', doi: '10.3322/caac.21565', firstAuthor: 'Miller', year: 2019, toReference: (p) => ({ ...p, cancer_hx: false }) },
+  { key: 'education', factor: 'Education', role: 'context', evidence: 'moderate', citation: 'RES-02 · SES', doi: '10.1056/NEJMsa0707519', firstAuthor: 'Mackenbach', year: 2008, toReference: (p) => ({ ...p, higher_educ: REFERENCE_PROFILE.higher_educ }) },
+  { key: 'income', factor: 'Income', role: 'context', evidence: 'moderate', citation: 'RES-02 · SES', doi: '10.1056/NEJMsa0707519', firstAuthor: 'Mackenbach', year: 2008, toReference: (p) => ({ ...p, income: REFERENCE_PROFILE.income }) },
   // Literature levers — reference = "unanswered" (i.e. the average person, contributing 0).
-  { key: 'diet', factor: 'Diet quality', role: 'lever', evidence: 'strong', citation: 'RES-03 · Trichopoulou 2003', toReference: (p) => ({ ...p, diet_score: undefined }) },
-  { key: 'alcohol', factor: 'Alcohol', role: 'lever', evidence: 'strong', citation: 'RES-02 · GBD 2018/2020', toReference: (p) => ({ ...p, alcohol: undefined }) },
-  { key: 'sedentary', factor: 'Sitting time', role: 'lever', evidence: 'moderate', citation: 'RES-03 · Chau 2013', toReference: (p) => ({ ...p, sitting_hours: undefined }) },
-  { key: 'stress', factor: 'Perceived stress', role: 'lever', evidence: 'weak', citation: 'RES-03 · Cohen 1983 PSS', toReference: (p) => ({ ...p, stress_score: undefined }) },
-  { key: 'mobility', factor: 'Mobility limitation', role: 'context', evidence: 'strong', citation: 'EXP-11 · NHANES PFQ', toReference: (p) => ({ ...p, mobility: undefined }) },
+  { key: 'diet', factor: 'Diet quality', role: 'lever', evidence: 'strong', citation: 'RES-03 · Trichopoulou 2003', doi: '10.1056/NEJMoa025039', firstAuthor: 'Trichopoulou', year: 2003, toReference: (p) => ({ ...p, diet_score: undefined }) },
+  { key: 'alcohol', factor: 'Alcohol', role: 'lever', evidence: 'strong', citation: 'RES-02 · GBD 2018/2020', doi: '10.1016/S0140-6736(18)31310-2', firstAuthor: 'Griswold', year: 2018, toReference: (p) => ({ ...p, alcohol: undefined }) },
+  { key: 'sedentary', factor: 'Sitting time', role: 'lever', evidence: 'moderate', citation: 'RES-03 · Chau 2013', doi: '10.1371/journal.pone.0080000', firstAuthor: 'Chau', year: 2013, toReference: (p) => ({ ...p, sitting_hours: undefined }) },
+  { key: 'stress', factor: 'Perceived stress', role: 'lever', evidence: 'weak', citation: 'RES-03 · Cohen 1983 PSS', doi: '10.2307/2136404', firstAuthor: 'Cohen', year: 1983, toReference: (p) => ({ ...p, stress_score: undefined }) },
+  { key: 'mobility', factor: 'Mobility limitation', role: 'context', evidence: 'strong', citation: 'EXP-11 · NHANES PFQ', doi: '10.1001/jama.2010.1923', firstAuthor: 'Studenski', year: 2011, toReference: (p) => ({ ...p, mobility: undefined }) },
 ]
 
 /** Per-factor Δyears vs the reference person (positive = adds years). Sorted by magnitude. */
@@ -283,7 +287,12 @@ export function attributions(p: Profile): Attribution[] {
     const refYears = yearsAt(f.toReference(p))
     const delta = round1(userYears - refYears) // user minus "if this factor were average"
     if (Math.abs(delta) < 0.05) continue
-    out.push({ factor: f.factor, delta_years: delta, evidence: f.evidence, role: f.role, citation: f.citation })
+    out.push({
+      factor: f.factor, delta_years: delta, evidence: f.evidence, role: f.role, citation: f.citation,
+      // The real service always ships a resolvable link with every factor; the mock must too, or
+      // the tests would pass on a page that shows unlinkable citations in production.
+      doi: f.doi, url: `https://doi.org/${f.doi}`, first_author: f.firstAuthor, year: f.year,
+    })
   }
   return out.sort((a, b) => Math.abs(b.delta_years) - Math.abs(a.delta_years))
 }

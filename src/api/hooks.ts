@@ -27,6 +27,15 @@ export function useAnswers() {
   return useQuery({ queryKey: queryKeys.answers, queryFn: () => getClient().getAnswers() })
 }
 
+/** The model's ontology — roles, causal graph, and the article behind each factor. */
+export function useOntology() {
+  return useQuery({
+    queryKey: ['ontology'],
+    queryFn: () => getClient().getOntology(),
+    staleTime: Infinity, // ships with the model version; it cannot change under a running server
+  })
+}
+
 export function useLocations() {
   return useQuery({ queryKey: queryKeys.locations, queryFn: () => getClient().listLocations() })
 }

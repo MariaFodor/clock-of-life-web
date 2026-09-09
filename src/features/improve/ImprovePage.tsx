@@ -2,14 +2,28 @@ import { Link } from 'react-router-dom'
 import { useProfile } from '../../app/profile'
 import { useRecommendations } from '../../api/hooks'
 import { EvidenceChip, StatisticalEstimateNote } from '../../components/framing'
+import { ArticleLink } from '../../components/ArticleLink'
+import { useOntology } from '../../api/hooks'
+import type { Ontology } from '../../api/types'
 import { PageHeader, Card, NeedsProfile, Loading, ErrorState } from '../../components/ui'
 import { fmtDelta } from '../../components/format'
+
+/** The article behind a recommendation, looked up by the feature key the service returns. */
+function factorLink(ontology: Ontology | undefined, factor: string) {
+  const prior = ontology?.[factor]?.prior
+  if (!prior?.doi && !prior?.url) return null
+  return (
+    <ArticleLink url={prior.url} doi={prior.doi} firstAuthor={prior.first_author} year={prior.year}
+                 citation={prior.title} />
+  )
+}
 
 const DIFFICULTY_LABEL = { 1: 'easier', 2: 'moderate', 3: 'harder' } as const
 
 export function ImprovePage() {
   const { profile } = useProfile()
   const query = useRecommendations(profile)
+  const ontology = useOntology()
 
   if (!profile) {
     return (
@@ -57,6 +71,9 @@ export function ImprovePage() {
                     <span className="font-medium text-clock-good">up to {fmtDelta(rec.potential_years)}</span>
                     <EvidenceChip grade={rec.evidence} />
                     <span className="text-[11px] text-clock-muted">{DIFFICULTY_LABEL[rec.difficulty]}</span>
+                    {/* The advice and the paper it rests on, side by side — a recommendation the
+                        reader cannot check is just an assertion. */}
+                    {factorLink(ontology.data, rec.factor)}
                   </div>
                 </div>
               </Card>

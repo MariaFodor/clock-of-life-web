@@ -3,6 +3,9 @@ import { useWhy } from '../../api/hooks'
 import { FactorBar } from '../../components/FactorBar'
 import { EvidenceChip, StatisticalEstimateNote } from '../../components/framing'
 import { PageHeader, Card, NeedsProfile, Loading, ErrorState } from '../../components/ui'
+import { ArticleLink } from '../../components/ArticleLink'
+import { CausalGraph } from '../../components/CausalGraph'
+import { useOntology } from '../../api/hooks'
 
 const ROLE_LABEL: Record<string, string> = {
   lever: 'you can change this',
@@ -13,6 +16,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function WhyPage() {
   const { profile } = useProfile()
+  const ontology = useOntology()
   const query = useWhy(profile)
 
   if (!profile) {
@@ -34,6 +38,18 @@ export function WhyPage() {
       {query.isLoading && <Loading label="Working out the breakdown…" />}
       {query.isError && <ErrorState message={(query.error as Error).message} />}
 
+      {ontology.data && (
+        <Card className="mt-5">
+          <h2 className="mb-1 text-lg font-semibold text-clock-ink">How these factors reach your clock</h2>
+          <p className="mb-3 text-sm text-clock-muted">
+            Most factors act <em>through</em> others. That is why a bigger waist matters a great deal
+            and yet, once we already know your blood pressure and blood sugar, adds little on its own —
+            those are the road it travels by.
+          </p>
+          <CausalGraph ontology={ontology.data} />
+        </Card>
+      )}
+
       {query.data && (
         <Card>
           {query.data.length === 0 ? (
@@ -49,7 +65,9 @@ export function WhyPage() {
                       <div className="ml-[10.75rem] mt-1 flex flex-wrap items-center gap-2">
                         <EvidenceChip grade={a.evidence} />
                         <span className="text-[11px] text-clock-muted">{ROLE_LABEL[a.role] ?? a.role}</span>
-                        <span className="text-[11px] text-clock-muted">· {a.citation}</span>
+                        <span className="text-[11px] text-clock-muted">·</span>
+                        <ArticleLink url={a.url} doi={a.doi} firstAuthor={a.first_author}
+                                     year={a.year} citation={a.citation} />
                       </div>
                     </div>
                   ))

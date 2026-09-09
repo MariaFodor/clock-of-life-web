@@ -19,6 +19,7 @@ import type {
   Estimate,
   FactorRole,
   Location,
+  Ontology,
   Meta,
   Profile,
   Recommendation,
@@ -74,7 +75,10 @@ const round1 = (x: number) => Math.round(x * 10) / 10
 
 /** Server /api/estimate response — Estimate fields plus why/model/calculation_id. */
 interface EstimateEnvelope extends Estimate {
-  why: Array<{ factor: string; delta_years: number; evidence: string; role: string; citation: string }>
+  why: Array<{
+    factor: string; delta_years: number; evidence: string; role: string; citation: string
+    url?: string; doi?: string; first_author?: string; year?: number
+  }>
 }
 
 /** A reference "average person" of the same age & sex, for the benchmark comparison (RR ≈ 1). */
@@ -119,6 +123,10 @@ export function createHttpClient(): ApiClient {
         evidence: asGrade(w.evidence),
         role: asRole(w.role),
         citation: w.citation,
+        url: w.url,
+        doi: w.doi,
+        first_author: w.first_author,
+        year: w.year,
       })),
     )
     yearsCache.set(keyOf(profile), env.estimate_years)
@@ -205,6 +213,14 @@ export function createHttpClient(): ApiClient {
         difficulty: 2,
         priority: round1(r.score),
       }))
+    },
+
+    async getOntology(): Promise<Ontology> {
+      const raw = await get<Record<string, unknown>>('/ontology')
+      // Strip the file's leading `_comment`/`_meta` bookkeeping keys — the UI wants factors only.
+      return Object.fromEntries(
+        Object.entries(raw).filter(([k]) => !k.startsWith('_')),
+      ) as Ontology
     },
 
     async listLocations(): Promise<Location[]> {
