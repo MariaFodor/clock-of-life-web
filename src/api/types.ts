@@ -141,9 +141,32 @@ export interface Attribution {
   factor: string
   delta_years: number
   evidence: EvidenceGrade
-  role: FactorRole
+  /** `marker` factors predict and explain but are never recommended (e.g. long sleep, mobility). */
+  role: FactorRole | 'marker'
   citation: string
+  /** Resolvable link to the paper behind this factor, verified when the ontology was written. */
+  url?: string
+  doi?: string
+  first_author?: string
+  year?: number
 }
+
+/** One factor as the model's ontology describes it (`GET /api/ontology`). */
+export interface OntologyFactor {
+  role: FactorRole | 'marker'
+  /** what this factor causes — its mediators, the edges of the causal graph */
+  causes?: string[]
+  confounded_by?: string[]
+  sign?: 'positive' | 'negative' | 'free'
+  grade?: EvidenceGrade
+  questions?: string[]
+  prior?: { doi?: string; url?: string; title?: string; first_author?: string; year?: number }
+  note?: string
+  decision?: string
+  assumption?: string
+}
+
+export type Ontology = Record<string, OntologyFactor>
 
 /** One prioritized recommendation (Improve surface). Levers/manage only, never context/baseline. */
 export interface Recommendation {

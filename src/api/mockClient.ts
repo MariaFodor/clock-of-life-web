@@ -14,6 +14,7 @@ import type {
   CohortStat,
   Estimate,
   Location,
+  Ontology,
   Meta,
   Profile,
   Recommendation,
@@ -114,6 +115,46 @@ export function createMockClient(): ApiClient {
 
     async setHomeLocation(_name: string, _country: string): Promise<void> {},
 
+    // A small but structurally faithful slice of the real ontology: enough edges that the graph
+    // renders and its "acts through" story is true, with the same verified DOIs the model ships.
+    async getOntology(): Promise<Ontology> {
+      return {
+        education: { role: 'context', causes: ['income', 'smk_current', 'diet', 'activity', 'waist'], grade: 'moderate',
+                     prior: { doi: '10.1056/NEJMsa0707519', first_author: 'Mackenbach', year: 2008 } },
+        income: { role: 'context', causes: ['diet', 'activity', 'waist', 'env'], grade: 'moderate',
+                  prior: { doi: '10.1056/NEJMsa0707519', first_author: 'Mackenbach', year: 2008 } },
+        env: { role: 'context', causes: ['respiratory'], grade: 'moderate',
+               prior: { doi: '10.1289/ehp.1307049', first_author: 'Burnett', year: 2014 } },
+        smk_current: { role: 'lever', causes: ['respiratory', 'cvd_hx', 'waist'], sign: 'positive', grade: 'strong',
+                       prior: { doi: '10.1056/NEJMsa1211128', first_author: 'Jha', year: 2013 } },
+        activity: { role: 'lever', causes: ['waist', 'diabetes', 'sbp'], sign: 'negative', grade: 'strong',
+                    prior: { doi: '10.1001/jamainternmed.2015.0533', first_author: 'Arem', year: 2015 } },
+        diet: { role: 'lever', causes: ['waist', 'sbp', 'diabetes'], sign: 'negative', grade: 'strong',
+                prior: { doi: '10.1056/NEJMoa025039', first_author: 'Trichopoulou', year: 2003 } },
+        alcohol: { role: 'lever', causes: ['sbp', 'cancer_hx'], sign: 'positive', grade: 'strong',
+                   prior: { doi: '10.1016/S0140-6736(18)31310-2', first_author: 'Griswold', year: 2018 } },
+        sedentary: { role: 'lever', causes: ['waist', 'diabetes'], sign: 'positive', grade: 'moderate',
+                     prior: { doi: '10.1371/journal.pone.0080000', first_author: 'Chau', year: 2013 } },
+        waist: { role: 'lever', causes: ['diabetes', 'sbp', 'cvd_hx', 'mobility'], sign: 'positive', grade: 'strong',
+                 prior: { doi: '10.1136/bmj.m3324', first_author: 'Jayedi', year: 2020 } },
+        diabetes: { role: 'manage', causes: ['cvd_hx', 'mobility'], sign: 'positive', grade: 'strong',
+                    prior: { doi: '10.1056/NEJMoa1008862', first_author: 'Emerging Risk Factors Collaboration', year: 2011 } },
+        sbp: { role: 'manage', causes: ['cvd_hx'], sign: 'positive', grade: 'strong',
+               prior: { doi: '10.1016/S0140-6736(02)11911-8', first_author: 'Prospective Studies Collaboration', year: 2002 } },
+        respiratory: { role: 'manage', causes: ['mobility'], sign: 'positive', grade: 'strong',
+                       prior: { doi: '10.1183/09031936.06.00124605', first_author: 'Halbert', year: 2006 } },
+        cvd_hx: { role: 'context', causes: ['mobility'], sign: 'positive', grade: 'strong',
+                  prior: { doi: '10.1001/jama.2015.7008', first_author: 'Di Angelantonio', year: 2015 } },
+        cancer_hx: { role: 'context', causes: ['mobility'], sign: 'positive', grade: 'strong',
+                     prior: { doi: '10.3322/caac.21565', first_author: 'Miller', year: 2019 } },
+        sleep_long: { role: 'marker', causes: [], sign: 'positive', grade: 'moderate',
+                      decision: 'Demoted from lever to marker: illness causes long sleep more than the reverse, so it explains but is never recommended.',
+                      prior: { doi: '10.1093/sleep/33.5.585', first_author: 'Cappuccio', year: 2010 } },
+        mobility: { role: 'marker', causes: [], sign: 'positive', grade: 'strong',
+                    prior: { doi: '10.1001/jama.2010.1923', first_author: 'Studenski', year: 2011 } },
+      }
+    },
+
     async saveAnswers(input: AnswerInput[]): Promise<{ saved: number }> {
       for (const a of input) {
         answers.set(a.question_code, {
@@ -146,7 +187,7 @@ export function createMockClient(): ApiClient {
 
       if (profile.smoke === 2) {
         push({
-          factor: 'Smoking',
+          factor: 'smk_current',
           role: 'lever',
           headline: 'Stop smoking',
           detail: 'The single largest modifiable factor. Benefit builds over roughly ten years.',
@@ -157,7 +198,7 @@ export function createMockClient(): ApiClient {
       }
       if (profile.pa_min < 900) {
         push({
-          factor: 'Physical activity',
+          factor: 'activity',
           role: 'lever',
           headline: 'Move more — aim for ~150 active minutes a week',
           detail: 'Brisk walking, cycling, or sport most days. Even modest increases help.',
@@ -168,7 +209,7 @@ export function createMockClient(): ApiClient {
       }
       if (profile.waist > 94) {
         push({
-          factor: 'Waist circumference',
+          factor: 'waist',
           role: 'lever',
           headline: 'Reduce your waistline',
           detail: 'Where you carry weight tracks health better than weight alone.',
@@ -179,7 +220,7 @@ export function createMockClient(): ApiClient {
       }
       if (profile.diabetes) {
         push({
-          factor: 'Diabetes',
+          factor: 'diabetes',
           role: 'manage',
           headline: 'Keep your diabetes well-controlled',
           detail: 'We never suggest undoing a diagnosis — managing it well protects the years ahead.',
@@ -190,7 +231,7 @@ export function createMockClient(): ApiClient {
       }
       if (profile.high_bp) {
         push({
-          factor: 'High blood pressure',
+          factor: 'high_bp',
           role: 'manage',
           headline: 'Keep your blood pressure in range',
           detail: 'Regular monitoring and treatment adherence.',

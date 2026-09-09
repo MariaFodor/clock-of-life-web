@@ -13,6 +13,7 @@ import type {
   CohortStat,
   Estimate,
   Location,
+  Ontology,
   Meta,
   Profile,
   Recommendation,
@@ -40,6 +41,8 @@ export interface ApiClient {
   getBenchmark(profile: Profile): Promise<Benchmark>
   getWhy(profile: Profile): Promise<Attribution[]>
   getRecommendations(profile: Profile): Promise<Recommendation[]>
+  /** The model's ontology: roles, causal graph and the verified article behind each factor. */
+  getOntology(): Promise<Ontology>
   listLocations(): Promise<Location[]>
   relocate(profile: Profile, candidateId: string): Promise<RelocateResult>
   getStats(): Promise<CohortStat[]>
