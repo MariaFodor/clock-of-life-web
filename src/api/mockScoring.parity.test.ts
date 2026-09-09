@@ -15,17 +15,21 @@ import {
   ALCOHOL_LEVELS,
   ALCOHOL_REFERENCE_LEVEL,
   effectiveBeta,
+  effectiveCigsDay,
   effectiveStandardizer,
   RO_NDVI_REF,
   RO_PM25_REF,
   relativeRisk,
+  SMOKER_MEAN_CIGS,
 } from './mockScoring'
 import type { Profile } from './types'
 
-// Pinned to the bundle version the service defaults to (its src/main.rs). Resolved relative to this
-// file where the runner exposes a file URL, else relative to the working directory — so the suite
-// behaves the same under vitest, an IDE, or a workspace runner.
-const BUNDLE_VERSION = 'model-v2.2.0'
+// The bundle version is READ from the service's own default, never restated here. It was pinned to
+// a literal, and the literal went stale at v2.2.0 while the service moved to v3.0.1 — so this
+// suite, the one guard against mock-vs-service drift, spent three bundle versions failing to
+// collect. A drift guard that needs manual updating to keep working is a drift guard that stops
+// working. Resolved relative to this file where the runner exposes a file URL, else relative to
+// the working directory — so the suite behaves the same under vitest, an IDE, or a workspace runner.
 const SERVICE_DIR = (() => {
   try {
     if (import.meta.url?.startsWith('file:')) {
@@ -36,6 +40,28 @@ const SERVICE_DIR = (() => {
   }
   return resolve(process.cwd(), '../clock-of-life-service')
 })()
+/** The bundle directory `clock-of-life-service/src/main.rs` falls back to when CLOCK_BUNDLE is unset. */
+function serviceDefaultBundle(): string {
+  const mainRs = resolve(SERVICE_DIR, 'src/main.rs')
+  if (!existsSync(mainRs)) {
+    throw new Error(
+      `Parity fixture missing: ${mainRs}. This suite needs the sibling clock-of-life-service ` +
+        'checkout (its vendored bundle is the source of truth for the literature coefficients).',
+    )
+  }
+  const m = /unwrap_or_else\(\|_\|\s*"bundle\/([^"]+)"\.to_string\(\)\)/.exec(
+    readFileSync(mainRs, 'utf8'),
+  )
+  if (!m) {
+    throw new Error(
+      `Could not read the default bundle version out of ${mainRs}. If the service changed how it ` +
+        'selects a bundle, update this reader — do not re-pin a literal here, that is what went stale.',
+    )
+  }
+  return m[1]
+}
+
+const BUNDLE_VERSION = serviceDefaultBundle()
 const BUNDLE = resolve(SERVICE_DIR, 'bundle', BUNDLE_VERSION, 'coefficients.json')
 
 if (!existsSync(BUNDLE)) {
@@ -47,7 +73,8 @@ if (!existsSync(BUNDLE)) {
       ? `Parity fixture missing: ${BUNDLE}. This suite needs the sibling clock-of-life-service ` +
         'checkout (its vendored bundle is the source of truth for the literature coefficients).'
       : `Parity fixture missing: ${BUNDLE_VERSION} is not in the sibling service bundle/ directory, ` +
-        `which holds: ${found}. Update BUNDLE_VERSION here (and the mock's constants) to match.`,
+        `which holds: ${found}. The service's main.rs points at a bundle it does not ship — fix ` +
+        'that, not this test.',
   )
 }
 
@@ -114,5 +141,22 @@ describe('mock ↔ bundle parity (literature levers)', () => {
   it('the environment reference points match the service constants', () => {
     expect(RO_PM25_REF).toBe(serviceConst('RO_PM25_REF'))
     expect(RO_NDVI_REF).toBe(serviceConst('RO_NDVI_REF'))
+  })
+
+  // The mock did not replicate this imputation at all, so mock and service disagreed about what a
+  // current smoker who never gave a dose actually scores — and What-If's dose lever reasons about
+  // exactly that number.
+  it("an undeclared smoker's imputed dose matches the bundle", () => {
+    const fromBundle = (
+      JSON.parse(readFileSync(BUNDLE, 'utf8')) as {
+        conditional_defaults?: Record<string, number>
+      }
+    ).conditional_defaults?.cigs_day_when_current_smoker
+    expect(fromBundle).toBeDefined()
+    expect(SMOKER_MEAN_CIGS).toBe(fromBundle)
+    // And it is the number the scorer reaches for, not just a constant sitting next to it.
+    expect(effectiveCigsDay({ smoke: 2, cigs_day: 0 })).toBe(fromBundle)
+    expect(effectiveCigsDay({ smoke: 2, cigs_day: 15 })).toBe(15)
+    expect(effectiveCigsDay({ smoke: 1, cigs_day: 15 })).toBe(0)
   })
 })

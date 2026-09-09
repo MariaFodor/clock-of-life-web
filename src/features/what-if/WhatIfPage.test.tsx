@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { WhatIfPage } from './WhatIfPage'
+import { createMockClient } from '../../api/mockClient'
 import { renderWithProviders, SAMPLE_PROFILE } from '../../test/harness'
 
 describe('<WhatIfPage/>', () => {
@@ -60,6 +61,19 @@ describe('<WhatIfPage/>', () => {
   it('hides the dose for a non-smoker, who has none to change', () => {
     renderWithProviders(<WhatIfPage />, { profile: { ...SAMPLE_PROFILE, smoke: 0 } })
     expect(screen.queryByRole('slider', { name: /cigarettes per day/i })).not.toBeInTheDocument()
+  })
+
+  // The page had no error branch at all until now: a refusal flipped the button back from
+  // "Simulating…" and showed nothing. That is how the Sleep slider could 400 for however long
+  // without anyone noticing, so the fix for that slider is only half a fix without this.
+  it('shows the service\'s reason when a scenario is refused', async () => {
+    const user = userEvent.setup()
+    const client = createMockClient()
+    client.whatif = () => Promise.reject(new Error('sleep is no longer a What-If lever'))
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE, client })
+
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+    expect(await screen.findByText(/no longer a What-If lever/i)).toBeInTheDocument()
   })
 
   it('prices cutting down below quitting, and says cutting down is not quitting', async () => {

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useProfile } from '../../app/profile'
 import { useWhatIf } from '../../api/hooks'
 import type { SmokeStatus, WhatIf, WhatIfChanges } from '../../api/types'
-import { PageHeader, Card, NeedsProfile } from '../../components/ui'
+import { PageHeader, Card, NeedsProfile, ErrorState } from '../../components/ui'
 import { StatisticalEstimateNote } from '../../components/framing'
 import { fmtDelta, fmtYears, deltaTone } from '../../components/format'
 
@@ -15,13 +15,15 @@ interface SavedScenario {
 }
 
 /** A short human summary of which levers a scenario changed. */
-function summarizeChanges(changes: WhatIfChanges): string {
+function summarizeChanges(changes: WhatIfChanges, baseSmoke: SmokeStatus): string {
   const parts: string[] = []
   if (changes.smoke !== undefined) parts.push(`smoking → ${SMOKE_LABEL[changes.smoke]}`)
   if (changes.pa_min !== undefined) parts.push(`activity → ${changes.pa_min.toFixed(0)} MET-min`)
   // Only while the scenario still smokes: "smoking → Never, 5 cigarettes/day" describes nobody, and
-  // the service zeroes the dose on quitting anyway.
-  if (changes.cigs_day !== undefined && (changes.smoke ?? 2) === 2) {
+  // the service zeroes the dose on quitting anyway. The base status is passed in rather than
+  // defaulted to "current": defaulting is only correct while the dose slider renders exclusively
+  // for smokers, which is a fact about another function.
+  if (changes.cigs_day !== undefined && (changes.smoke ?? baseSmoke) === 2) {
     parts.push(`${changes.cigs_day.toFixed(0)} cigarettes/day`)
   }
   if (changes.waist !== undefined) parts.push(`waist → ${changes.waist.toFixed(0)} cm`)
@@ -55,7 +57,7 @@ export function WhatIfPage() {
   }
   const save = () => {
     if (!whatif.data) return
-    setScenarios((prev) => [...prev, { id: Date.now(), summary: summarizeChanges(changes), result: whatif.data! }])
+    setScenarios((prev) => [...prev, { id: Date.now(), summary: summarizeChanges(changes, profile.smoke), result: whatif.data! }])
   }
 
   // Best = the largest gain in years (ties broken by insertion order).
@@ -104,7 +106,11 @@ export function WhatIfPage() {
           {smoke === 2 && (
             <SliderRow
               label="Cigarettes per day"
-              min={0}
+              // Not zero: the service refuses a zero dose from a current smoker, because the model
+              // reads it as "did not answer" and scores it at the average smoker's consumption —
+              // which made cutting to zero worth LESS than cutting to one. Quitting is the smoking
+              // button above, and it is the honest way to ask that question.
+              min={1}
               max={60}
               step={1}
               value={cigs}
@@ -146,6 +152,12 @@ export function WhatIfPage() {
           </div>
         </div>
       </Card>
+
+      {/* The service refuses some scenarios with a reason — a sleep change, an implausible dose.
+          Until now the page had no error branch at all: a rejection just flipped the button back
+          from "Simulating…" and showed nothing, which is why the sleep slider could 400 for
+          however long without anyone noticing. A refusal is an answer and belongs on screen. */}
+      {whatif.isError && <ErrorState message={(whatif.error as Error).message} />}
 
       {whatif.data && (
         <Card className="mt-5">
@@ -236,10 +248,15 @@ export function WhatIfPage() {
 
 /** A factor the estimate uses but What-If must not offer: shown, valued, and explained. */
 function MarkerRow({ label, display, reason }: { label: string; display: string; reason: string }) {
+  // Deliberately not a disabled input: a dimmed control announces itself as something you failed to
+  // use. This is text. The group + label ties the three nodes together so the reason is heard as
+  // belonging to the value, since the dashed border that conveys that visually says nothing at all.
+  const labelId = `marker-${label.replace(/\W+/g, '-').toLowerCase()}`
   return (
-    <div className="rounded-lg border border-dashed border-clock-line p-3">
+    <div role="group" aria-labelledby={labelId}
+         className="rounded-lg border border-dashed border-clock-line p-3">
       <div className="mb-1 flex items-center justify-between">
-        <span className="label text-clock-muted">{label}</span>
+        <span id={labelId} className="label text-clock-muted">{label}</span>
         <span className="text-sm font-medium text-clock-muted">{display}</span>
       </div>
       <p className="text-xs text-clock-muted">{reason}</p>
