@@ -59,7 +59,7 @@ const GRADE_LABEL: Record<EvidenceGrade, string> = {
  */
 export function MoodSupportNote() {
   return (
-    <div role="note" className="rounded-lg border border-clock-brand/30 bg-clock-brandsoft px-4 py-3 text-sm text-clock-ink">
+    <div role="status" aria-live="polite" className="rounded-lg border border-clock-brand/30 bg-clock-brandsoft px-4 py-3 text-sm text-clock-ink">
       Your answers suggest you may have been feeling low lately. That doesn't change your estimate —
       but it matters. Talking to someone you trust or a professional can genuinely help, and if you
       are in crisis, please reach out to a local helpline now.

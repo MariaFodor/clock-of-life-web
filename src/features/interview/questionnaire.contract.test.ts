@@ -39,6 +39,10 @@ describe('questionnaire ↔ service seed contract', () => {
     expect(unpersisted).toEqual(['HEIGHT', 'WEIGHT', 'SBP'])
   })
 
+  // Still open (REVIEW-2026-09-09 W10, half-closed by LEV-04): the CODES are pinned here, but the
+  // persisted VALUES are still internal option keys ('few', 'u15', 'hbp') and battery indices, where
+  // the seed stores display labels. Q19 is now a 4-item array as W10 asked; the value vocabulary is
+  // the remaining half and needs a service-side decision before anything reads answers back.
   it('sends canonical codes and drops hidden conditional answers', () => {
     // A former smoker answers the quit-year, then switches back to "never": the stale
     // conditional answers must not be persisted.

@@ -48,3 +48,37 @@ describe('mock scoring', () => {
     expect(smokingRow!.role).toBe('lever')
   })
 })
+
+describe('literature levers (mock parity with the service)', () => {
+  const base: Profile = {
+    country: 'RO', age: 50, sex: 'M', smoke: 0, pa_min: 600, sleep: 7, waist: 94, bmi: 28.9,
+  }
+
+  it('is neutral for unanswered levers and at their reference values', () => {
+    const unanswered = scoreEstimate(base).estimate_years
+    const atReference = scoreEstimate({
+      ...base, diet_score: 2.5, sitting_hours: 6, stress_score: 6.11, alcohol: 'light',
+    }).estimate_years
+    expect(atReference).toBe(unanswered)
+  })
+
+  it('moves the estimate in the evidenced direction', () => {
+    const years = (p: Partial<Profile>) => scoreEstimate({ ...base, ...p }).estimate_years
+    const b = years({})
+    expect(years({ alcohol: 'heavy' })).toBeLessThan(years({ alcohol: 'none' }))
+    expect(years({ diet_score: 5 })).toBeGreaterThan(years({ diet_score: 0 }))
+    expect(years({ sitting_hours: 12 })).toBeLessThan(b)
+    expect(years({ stress_score: 16 })).toBeLessThan(b)
+    expect(years({ mobility: 1 })).toBeLessThan(b)
+    expect(years({ pm25: 25, ndvi: 0.3 })).toBeLessThan(years({ pm25: 8, ndvi: 0.7 }))
+  })
+
+  it('explains the levers in the Why? breakdown and prices them in What-If', () => {
+    const keys = attributions({ ...base, alcohol: 'heavy', diet_score: 0 }).map((a) => a.factor)
+    expect(keys).toContain('Alcohol')
+    expect(keys).toContain('Diet quality')
+    const wi = scoreWhatIf({ ...base, alcohol: 'heavy', diet_score: 0 },
+                           { alcohol: 'none', diet_score: 5 })
+    expect(wi.delta_years).toBeGreaterThan(0)
+  })
+})

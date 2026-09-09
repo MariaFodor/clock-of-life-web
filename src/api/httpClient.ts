@@ -214,8 +214,9 @@ export function createHttpClient(): ApiClient {
       return rows.map((l) => ({
         id: l.name,
         name: l.name,
-        pm25: l.pm25 ?? 0,
-        ndvi: l.ndvi ?? 0,
+        // A missing exposure stays unknown — coercing it to 0 would score pristine air (PR#1 N1).
+        pm25: l.pm25 ?? undefined,
+        ndvi: l.ndvi ?? undefined,
         kind: l.area_type === 'rural' ? 'rural' : l.area_type === 'suburb' ? 'suburb' : 'city',
       }))
     },

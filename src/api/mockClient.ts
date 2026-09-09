@@ -32,9 +32,20 @@ const LOCATIONS: Location[] = [
   { id: 'bran-rural', name: 'Bran (rural)', pm25: 7.8, ndvi: 0.73, kind: 'rural' },
 ]
 
-/** ENV term (THE_QUESTIONNAIRE.md Q23/Q24) expressed as a log-hazard contribution. */
+/**
+ * ENV term (THE_QUESTIONNAIRE.md Q23/Q24) as a log-hazard contribution. An unknown exposure on
+ * either side contributes 0 for that component — missing data is not pristine air (PR#1 N1).
+ */
 function envLogHazard(loc: Location, ref: Location): number {
-  return Math.log(1.095) * ((loc.pm25 - ref.pm25) / 10) + Math.log(0.965) * ((loc.ndvi - ref.ndvi) / 0.1)
+  const air =
+    loc.pm25 === undefined || ref.pm25 === undefined
+      ? 0
+      : Math.log(1.095) * ((loc.pm25 - ref.pm25) / 10)
+  const green =
+    loc.ndvi === undefined || ref.ndvi === undefined
+      ? 0
+      : Math.log(0.965) * ((loc.ndvi - ref.ndvi) / 0.1)
+  return air + green
 }
 
 const round1 = (x: number) => Math.round(x * 10) / 10
@@ -205,7 +216,10 @@ export function createMockClient(): ApiClient {
       const base = scoreEstimate(profile).estimate_years
       const scenario = base * Math.pow(Math.exp(dLogHazard), -0.4)
       const delta = round1(scenario - base)
-      const cleaner = candidate.pm25 < current.pm25
+      const cleaner =
+        candidate.pm25 !== undefined && current.pm25 !== undefined
+          ? candidate.pm25 < current.pm25
+          : false
       return {
         current,
         candidate,

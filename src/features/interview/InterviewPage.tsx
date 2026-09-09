@@ -75,9 +75,17 @@ function LocationField({
   value: Answers[string]
   onChange: (v: Answers[string]) => void
 }) {
-  const { data: locations, isLoading } = useLocations()
+  const { data: locations, isLoading, isError } = useLocations()
   const current = (value as LocationAnswer | undefined)?.name ?? ''
   if (isLoading) return <p className="text-sm text-clock-muted">Loading locations…</p>
+  if (isError) {
+    return (
+      <p role="alert" className="text-sm text-clock-bad">
+        We could not load the list of locations, so this question can't be answered right now. Your
+        estimate will be calculated without the air-quality and greenspace term.
+      </p>
+    )
+  }
   return (
     <select
       className="field max-w-[16rem]"
@@ -173,6 +181,7 @@ function Field({
 export function InterviewPage() {
   const [answers, setAnswers] = useState<Answers>(DEFAULT_ANSWERS)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [locationError, setLocationError] = useState<string | null>(null)
   const navigate = useNavigate()
   const { setProfile, setEstimate } = useProfile()
   const estimate = useEstimate()
@@ -184,6 +193,7 @@ export function InterviewPage() {
 
   const onSubmit = async () => {
     setSubmitError(null)
+    setLocationError(null)
     if (errors.length) return
     // Every /api/estimate call persists a calculation row, so a save-only retry must not re-score
     // an unchanged profile — that would append one duplicate history row per click.
@@ -203,12 +213,6 @@ export function InterviewPage() {
     // (REVIEW-2026-09-09 W1: it failed silently for every user).
     try {
       await saveAnswers.mutateAsync(answersForApi(answers))
-      // Persist the home location too (auth); it powers the ENV term server-side and
-      // "Where Should I Live?". Same visibility rule as the answers: fail loudly, not silently.
-      const loc = answers.LOCATION as LocationAnswer | undefined
-      if (loc?.name) {
-        await getClient().setHomeLocation(loc.name, loc.country)
-      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown error'
       const authHint = /401|token|unauthori[sz]|expired/i.test(msg)
@@ -218,6 +222,21 @@ export function InterviewPage() {
         `Your Life Clock was calculated, but your answers could not be saved to your profile (${msg}).${authHint} Press the button to try again, or open "My Life Clock" to continue without saving.`,
       )
       return
+    }
+    // The home location is a separate, lesser failure: the ENV term already reached this estimate
+    // via the profile's pm25/ndvi, and the stored row only powers "Where Should I Live?" later —
+    // so say what actually failed and let the user through (PR#1 B1).
+    const loc = answers.LOCATION as LocationAnswer | undefined
+    if (loc?.name) {
+      try {
+        await getClient().setHomeLocation(loc.name, loc.country)
+      } catch (e) {
+        setLocationError(
+          `Your answers were saved, but we could not record ${loc.name} as your home location (${
+            e instanceof Error ? e.message : 'unknown error'
+          }). You can set it again later from "Where Should I Live?".`,
+        )
+      }
     }
     navigate('/')
   }
@@ -263,15 +282,14 @@ export function InterviewPage() {
                   </div>
                 ))}
             </div>
+            {section.questions.some((q) => q.code === 'MOOD') && (moodScore(answers) ?? 0) >= 3 && (
+              <div className="mt-4">
+                <MoodSupportNote />
+              </div>
+            )}
           </Card>
         ))}
       </div>
-
-      {(moodScore(answers) ?? 0) >= 3 && (
-        <div className="mt-5">
-          <MoodSupportNote />
-        </div>
-      )}
 
       {errors.length > 0 && (
         <ul className="mt-5 space-y-1">
@@ -285,6 +303,11 @@ export function InterviewPage() {
       {submitError && (
         <div className="mt-5">
           <ErrorState message={submitError} />
+        </div>
+      )}
+      {locationError && (
+        <div className="mt-5">
+          <ErrorState message={locationError} />
         </div>
       )}
 

@@ -48,7 +48,8 @@ export function RelocatePage() {
               <div>
                 <div className="font-medium text-clock-ink">{loc.name}</div>
                 <div className="text-xs text-clock-muted">
-                  PM2.5 {loc.pm25} µg/m³ · greenspace {loc.ndvi.toFixed(2)} · {loc.kind}
+                  PM2.5 {loc.pm25 === undefined ? 'unknown' : `${loc.pm25} µg/m³`} · greenspace{' '}
+                  {loc.ndvi === undefined ? 'unknown' : loc.ndvi.toFixed(2)} · {loc.kind}
                 </div>
               </div>
               <button

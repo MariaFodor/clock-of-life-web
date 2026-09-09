@@ -164,10 +164,10 @@ export interface Recommendation {
 export interface Location {
   id: string
   name: string
-  /** annual mean PM2.5 (µg/m³) */
-  pm25: number
-  /** greenspace index (NDVI, 0–1) */
-  ndvi: number
+  /** annual mean PM2.5 (µg/m³); undefined when the layer has no value for this location */
+  pm25?: number
+  /** greenspace index (NDVI, 0–1); undefined when the layer has no value for this location */
+  ndvi?: number
   kind: 'city' | 'suburb' | 'rural'
 }
 
