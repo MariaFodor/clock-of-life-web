@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useEstimate, useSaveAnswers } from '../../api/hooks'
 import { useProfile } from '../../app/profile'
@@ -9,6 +9,7 @@ import {
   DEFAULT_ANSWERS,
   buildProfile,
   answersForApi,
+  isVisible,
   type Answers,
   type Question,
 } from './questionnaire'
@@ -87,22 +88,42 @@ export function InterviewPage() {
   const estimate = useEstimate()
   const saveAnswers = useSaveAnswers()
 
+  const lastEstimated = useRef<string | null>(null)
   const set = (code: string) => (v: Answers[string]) => setAnswers((prev) => ({ ...prev, [code]: v }))
   const { profile, errors } = useMemo(() => buildProfile(answers), [answers])
 
   const onSubmit = async () => {
     setSubmitError(null)
     if (errors.length) return
-    try {
-      const est = await estimate.mutateAsync(profile)
-      // Persistence of answers is best-effort — a failure there must not block the estimate.
-      saveAnswers.mutate(answersForApi(answers))
-      setProfile(profile)
-      setEstimate(est)
-      navigate('/')
-    } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'Could not calculate your estimate.')
+    // Every /api/estimate call persists a calculation row, so a save-only retry must not re-score
+    // an unchanged profile — that would append one duplicate history row per click.
+    const profileKey = JSON.stringify(profile)
+    if (lastEstimated.current !== profileKey) {
+      try {
+        const est = await estimate.mutateAsync(profile)
+        setProfile(profile)
+        setEstimate(est)
+        lastEstimated.current = profileKey
+      } catch (e) {
+        setSubmitError(e instanceof Error ? e.message : 'Could not calculate your estimate.')
+        return
+      }
     }
+    // The estimate is ready either way; a failed answer-save must be visible, never silent
+    // (REVIEW-2026-09-09 W1: it failed silently for every user).
+    try {
+      await saveAnswers.mutateAsync(answersForApi(answers))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'unknown error'
+      const authHint = /401|token|unauthori[sz]|expired/i.test(msg)
+        ? ' Your session may have expired — sign out, sign back in, and press the button again.'
+        : ''
+      setSubmitError(
+        `Your Life Clock was calculated, but your answers could not be saved to your profile (${msg}).${authHint} Press the button to try again, or open "My Life Clock" to continue without saving.`,
+      )
+      return
+    }
+    navigate('/')
   }
 
   return (
@@ -127,7 +148,7 @@ export function InterviewPage() {
 
             <div className="space-y-5">
               {section.questions
-                .filter((q) => !q.showWhen || q.showWhen(answers))
+                .filter((q) => isVisible(q, answers))
                 .map((q) => (
                   <div key={q.code}>
                     <div className="mb-2 flex items-center gap-2">
@@ -170,9 +191,9 @@ export function InterviewPage() {
           type="button"
           className="btn-primary"
           onClick={onSubmit}
-          disabled={errors.length > 0 || estimate.isPending}
+          disabled={errors.length > 0 || estimate.isPending || saveAnswers.isPending}
         >
-          {estimate.isPending ? 'Calculating…' : 'Calculate my Life Clock'}
+          {estimate.isPending ? 'Calculating…' : saveAnswers.isPending ? 'Saving…' : 'Calculate my Life Clock'}
         </button>
         <StatisticalEstimateNote />
       </div>

@@ -17,8 +17,14 @@ export interface Option {
 }
 
 export interface Question {
-  /** stable code sent to /api/answers */
+  /** internal key for UI state (answers map, DEFAULT_ANSWERS, buildProfile) */
   code: string
+  /**
+   * Canonical question code in the service's seed (`seeds/questions.json`, THE_QUESTIONNAIRE.md
+   * numbering) — the only codes `/api/answers` accepts. Questions without one (HEIGHT/WEIGHT/SBP,
+   * which have no seeded row yet — REVIEW-2026-09-09 W1/S8) are not persisted.
+   */
+  apiCode?: string
   prompt: string
   type: QuestionType
   options?: Option[]
@@ -51,17 +57,17 @@ export const SECTIONS: Section[] = [
     title: 'About you',
     whyWeAsk: 'Your age and sex set your starting point on the national life table; the rest gives context.',
     questions: [
-      { code: 'AGE', prompt: 'What is your age?', type: 'number', unit: 'years', scored: true },
-      { code: 'SEX', prompt: 'What is your sex?', type: 'radio', scored: true, options: [
+      { code: 'AGE', apiCode: 'Q1_age', prompt: 'What is your age?', type: 'number', unit: 'years', scored: true },
+      { code: 'SEX', apiCode: 'Q2_sex', prompt: 'What is your sex?', type: 'radio', scored: true, options: [
         { value: 'F', label: 'Female' },
         { value: 'M', label: 'Male' },
       ] },
-      { code: 'EDU', prompt: 'Highest level of education completed?', type: 'radio', scored: true, options: [
+      { code: 'EDU', apiCode: 'Q3_education', prompt: 'Highest level of education completed?', type: 'radio', scored: true, options: [
         { value: 'primary', label: 'Primary / secondary school' },
         { value: 'vocational', label: 'Vocational / some college' },
         { value: 'university', label: 'University degree or higher' },
       ] },
-      { code: 'INCOME', prompt: "Which range best describes your household's yearly income?", type: 'radio', scored: true, options: [
+      { code: 'INCOME', apiCode: 'Q4_income', prompt: "Which range best describes your household's yearly income?", type: 'radio', scored: true, options: [
         { value: 'lower', label: 'Lower' },
         { value: 'lower-middle', label: 'Lower-middle' },
         { value: 'middle', label: 'Middle' },
@@ -75,14 +81,14 @@ export const SECTIONS: Section[] = [
     whyWeAsk: 'Smoking is one of the strongest and most changeable influences on lifespan.',
     confidence: 'high',
     questions: [
-      { code: 'SMK', prompt: 'Do you smoke cigarettes?', type: 'radio', scored: true, options: [
+      { code: 'SMK', apiCode: 'Q5_smoking', prompt: 'Do you smoke cigarettes?', type: 'radio', scored: true, options: [
         { value: 'never', label: 'No, never' },
         { value: 'former', label: "I used to, but I've quit" },
         { value: 'current', label: 'Yes, currently' },
       ] },
-      { code: 'YEARS_QUIT', prompt: 'In what year did you quit?', type: 'number', unit: 'year', scored: false,
+      { code: 'YEARS_QUIT', apiCode: 'Q6_quit_year', prompt: 'In what year did you quit?', type: 'number', unit: 'year', scored: false,
         showWhen: (a) => a.SMK === 'former' },
-      { code: 'CIGS', prompt: 'On the days you smoked, about how many cigarettes per day?', type: 'number', scored: true,
+      { code: 'CIGS', apiCode: 'Q7_cigs_per_day', prompt: 'On the days you smoked, about how many cigarettes per day?', type: 'number', scored: true,
         showWhen: (a) => a.SMK === 'former' || a.SMK === 'current' },
     ],
   },
@@ -90,16 +96,16 @@ export const SECTIONS: Section[] = [
     title: 'Movement',
     whyWeAsk: 'How much you move — and how much you sit — both matter, and both are things you can change.',
     questions: [
-      { code: 'ACT_DAYS', prompt: 'In a typical week, how many days do you do at least moderate physical activity?', type: 'radio', scored: true,
+      { code: 'ACT_DAYS', apiCode: 'Q8_activity_days', prompt: 'In a typical week, how many days do you do at least moderate physical activity?', type: 'radio', scored: true,
         options: [0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) })) },
-      { code: 'ACT_MIN', prompt: 'On those days, about how many minutes each time?', type: 'radio', scored: true, options: [
+      { code: 'ACT_MIN', apiCode: 'Q9_activity_minutes', prompt: 'On those days, about how many minutes each time?', type: 'radio', scored: true, options: [
         { value: 'u15', label: 'Under 15' },
         { value: '15-29', label: '15–29' },
         { value: '30-44', label: '30–44' },
         { value: '45-59', label: '45–59' },
         { value: '60+', label: '60+ minutes' },
       ] },
-      { code: 'SEDENTARY', prompt: 'On a typical day, about how many hours do you spend sitting or looking at a screen?', type: 'radio', scored: false, options: [
+      { code: 'SEDENTARY', apiCode: 'Q10_sedentary', prompt: 'On a typical day, about how many hours do you spend sitting or looking at a screen?', type: 'radio', scored: false, options: [
         { value: 'u4', label: 'Under 4' },
         { value: '4-6', label: '4–6' },
         { value: '6-8', label: '6–8' },
@@ -113,7 +119,7 @@ export const SECTIONS: Section[] = [
     whyWeAsk: 'Both too little and too much sleep are linked with poorer outcomes.',
     confidence: 'medium',
     questions: [
-      { code: 'SLEEP', prompt: 'On a typical night, how many hours do you sleep?', type: 'radio', scored: true, options: [
+      { code: 'SLEEP', apiCode: 'Q11_sleep', prompt: 'On a typical night, how many hours do you sleep?', type: 'radio', scored: true, options: [
         { value: 'u5', label: 'Under 5' },
         { value: '5-6', label: '5–6' },
         { value: '7-8', label: '7–8' },
@@ -127,7 +133,7 @@ export const SECTIONS: Section[] = [
     whyWeAsk: 'Your waistline shows where you carry weight; height and weight together (your BMI) add a separate signal — a low BMI with a high waist can flag frailty.',
     confidence: 'high',
     questions: [
-      { code: 'WAIST', prompt: 'What is your waist measurement, taken around the belly button?', type: 'number', unit: 'cm', scored: true },
+      { code: 'WAIST', apiCode: 'Q12_waist', prompt: 'What is your waist measurement, taken around the belly button?', type: 'number', unit: 'cm', scored: true },
       { code: 'HEIGHT', prompt: 'How tall are you?', type: 'number', unit: 'cm', scored: true },
       { code: 'WEIGHT', prompt: 'What is your weight?', type: 'number', unit: 'kg', scored: true },
     ],
@@ -137,18 +143,18 @@ export const SECTIONS: Section[] = [
     whyWeAsk: 'A more Mediterranean-style pattern is one of the best-evidenced dietary links to longevity.',
     confidence: 'high',
     questions: [
-      { code: 'DIET_VEG', prompt: 'How often do you eat vegetables?', type: 'radio', scored: false, options: FREQ },
-      { code: 'DIET_FRUIT', prompt: 'How often do you eat fruit or nuts?', type: 'radio', scored: false, options: FREQ },
-      { code: 'DIET_GRAIN', prompt: 'How often do you eat whole grains?', type: 'radio', scored: false, options: FREQ },
-      { code: 'DIET_FISH', prompt: 'How often do you eat fish or seafood?', type: 'radio', scored: false, options: FREQ },
-      { code: 'DIET_MEAT', prompt: 'How often do you eat red or processed meat?', type: 'radio', scored: false, options: FREQ },
+      { code: 'DIET_VEG', apiCode: 'Q13_veg', prompt: 'How often do you eat vegetables?', type: 'radio', scored: false, options: FREQ },
+      { code: 'DIET_FRUIT', apiCode: 'Q14_fruit_nuts', prompt: 'How often do you eat fruit or nuts?', type: 'radio', scored: false, options: FREQ },
+      { code: 'DIET_GRAIN', apiCode: 'Q15_whole_grains', prompt: 'How often do you eat whole grains?', type: 'radio', scored: false, options: FREQ },
+      { code: 'DIET_FISH', apiCode: 'Q16_fish', prompt: 'How often do you eat fish or seafood?', type: 'radio', scored: false, options: FREQ },
+      { code: 'DIET_MEAT', apiCode: 'Q17_red_meat', prompt: 'How often do you eat red or processed meat?', type: 'radio', scored: false, options: FREQ },
     ],
   },
   {
     title: 'Alcohol',
     whyWeAsk: 'Current evidence finds no safe level — so we treat any reduction as helpful.',
     questions: [
-      { code: 'ALC', prompt: 'Which best describes your drinking?', type: 'radio', scored: false, options: [
+      { code: 'ALC', apiCode: 'Q18_alcohol', prompt: 'Which best describes your drinking?', type: 'radio', scored: false, options: [
         { value: 'none', label: "I don't drink" },
         { value: 'light', label: 'Light (up to ~1 drink/day)' },
         { value: 'moderate', label: 'Moderate (~1–2/day)' },
@@ -160,14 +166,14 @@ export const SECTIONS: Section[] = [
     title: 'Stress & mood',
     whyWeAsk: 'How you have been feeling lately affects wellbeing and, for stress, longevity.',
     questions: [
-      { code: 'STRESS', prompt: 'In the last month, how often have you felt unable to control the important things in your life?', type: 'radio', scored: false, options: [
+      { code: 'STRESS', apiCode: 'Q19_stress', prompt: 'In the last month, how often have you felt unable to control the important things in your life?', type: 'radio', scored: false, options: [
         { value: '0', label: 'Never' },
         { value: '1', label: 'Almost never' },
         { value: '2', label: 'Sometimes' },
         { value: '3', label: 'Fairly often' },
         { value: '4', label: 'Very often' },
       ] },
-      { code: 'MOOD', prompt: 'Over the last 2 weeks, how often have you had little interest or pleasure in doing things?', type: 'radio', scored: false, options: [
+      { code: 'MOOD', apiCode: 'Q20_mood', prompt: 'Over the last 2 weeks, how often have you had little interest or pleasure in doing things?', type: 'radio', scored: false, options: [
         { value: '0', label: 'Not at all' },
         { value: '1', label: 'Several days' },
         { value: '2', label: 'More than half the days' },
@@ -179,13 +185,13 @@ export const SECTIONS: Section[] = [
     title: 'Health history',
     whyWeAsk: 'Existing conditions help the estimate and shape what we suggest managing — we never tell you to "undo" a diagnosis.',
     questions: [
-      { code: 'COND', prompt: 'Has a doctor ever told you that you have any of these?', type: 'checkboxes', scored: true, options: [
+      { code: 'COND', apiCode: 'Q21_conditions', prompt: 'Has a doctor ever told you that you have any of these?', type: 'checkboxes', scored: true, options: [
         { value: 'diabetes', label: 'Diabetes' },
         { value: 'hbp', label: 'High blood pressure' },
         { value: 'chol', label: 'High cholesterol' },
         { value: 'resp', label: 'COPD, chronic bronchitis, or emphysema' },
       ] },
-      { code: 'HIST', prompt: 'Do any of these apply to you?', type: 'checkboxes', scored: true, options: [
+      { code: 'HIST', apiCode: 'Q22_history', prompt: 'Do any of these apply to you?', type: 'checkboxes', scored: true, options: [
         { value: 'mobility', label: 'Difficulty walking or climbing stairs' },
         { value: 'cvd', label: 'Heart attack, stroke, or heart failure' },
         { value: 'cancer', label: 'I have had cancer' },
@@ -198,7 +204,7 @@ export const SECTIONS: Section[] = [
     whyWeAsk: 'Air quality and green surroundings are linked with longevity, and this powers the "Where Should I Live?" comparison.',
     confidence: 'medium',
     questions: [
-      { code: 'AREA', prompt: 'What kind of area do you live in?', type: 'radio', scored: false, options: [
+      { code: 'AREA', apiCode: 'Q24_area_type', prompt: 'What kind of area do you live in?', type: 'radio', scored: false, options: [
         { value: 'city', label: 'City' },
         { value: 'suburb', label: 'Suburb / town' },
         { value: 'rural', label: 'Rural' },
@@ -295,10 +301,28 @@ export function buildProfile(a: Answers): ProfileDraft {
   return { profile, errors }
 }
 
-/** The answers to persist via /api/answers (only questions that were actually answered). */
+/** Single visibility predicate — the interview render and the persistence payload must agree. */
+export function isVisible(q: Question, a: Answers): boolean {
+  return !q.showWhen || q.showWhen(a)
+}
+
+/** Answered means a real value: not blank, and for checkbox groups at least one box ticked. */
+function isAnswered(v: Answers[string]): boolean {
+  if (v === undefined || v === '') return false
+  return !(Array.isArray(v) && v.length === 0)
+}
+
+/**
+ * The answers to persist via /api/answers, keyed by the service's canonical question codes.
+ * Included only when the question (1) has a seeded `apiCode`, (2) is currently visible — a hidden
+ * conditional's stale value (e.g. quit-year after switching back to "never") must not be persisted —
+ * and (3) was actually answered.
+ */
 export function answersForApi(a: Answers): Array<{ question_code: string; value: unknown }> {
-  return ALL_QUESTIONS.filter((q) => a[q.code] !== undefined && a[q.code] !== '').map((q) => ({
-    question_code: q.code,
+  return ALL_QUESTIONS.filter(
+    (q) => q.apiCode !== undefined && isVisible(q, a) && isAnswered(a[q.code]),
+  ).map((q) => ({
+    question_code: q.apiCode!,
     value: a[q.code],
   }))
 }
