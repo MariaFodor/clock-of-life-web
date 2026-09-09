@@ -25,6 +25,15 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
   )
 }
 
+/** A neutral, non-alarming notice (something partially succeeded) — not an error banner. */
+export function NoticeState({ message }: { message: string }) {
+  return (
+    <div role="status" aria-live="polite" className="rounded-lg border border-clock-line bg-clock-canvas px-4 py-3 text-sm text-clock-ink">
+      {message}
+    </div>
+  )
+}
+
 export function ErrorState({ message }: { message: string }) {
   return (
     <div role="alert" className="rounded-lg border border-clock-bad/30 bg-clock-bad/5 p-4 text-sm text-clock-ink">

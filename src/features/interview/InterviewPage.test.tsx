@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { InterviewPage } from './InterviewPage'
 import { renderWithProviders } from '../../test/harness'
 import { createMockClient } from '../../api/mockClient'
@@ -89,10 +89,16 @@ describe('LEV-04 failure paths', () => {
     client.setHomeLocation = async () => {
       throw new Error('service unavailable')
     }
+    // The probe renders whatever notice the interview hands over, so this test fails if the
+    // hand-off regresses (a bare "did we navigate?" assertion would not — the seam has broken twice).
+    const Probe = () => {
+      const notice = (useLocation().state as { notice?: string } | null)?.notice
+      return <div>{notice ?? 'LIFE CLOCK HOME'}</div>
+    }
     renderWithProviders(
       <Routes>
         <Route path="/interview" element={<InterviewPage />} />
-        <Route path="/" element={<div>LIFE CLOCK HOME</div>} />
+        <Route path="/" element={<Probe />} />
       </Routes>,
       { route: '/interview', client },
     )
@@ -101,8 +107,9 @@ describe('LEV-04 failure paths', () => {
     await user.selectOptions(picker, 'Cluj-Napoca')
     await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
 
-    // The estimate still lands (the ENV term already reached it) — the failure must not trap the user.
-    expect(await screen.findByText('LIFE CLOCK HOME')).toBeInTheDocument()
+    // The estimate still lands (the ENV term already reached it) — the failure must not trap the
+    // user — and the honest message travels with them instead of vanishing.
+    expect(await screen.findByText(/could not record Cluj-Napoca as your home location/i)).toBeInTheDocument()
   })
 
   it('explains itself when the location list cannot be loaded', async () => {

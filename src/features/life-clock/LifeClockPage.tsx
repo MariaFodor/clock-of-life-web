@@ -5,7 +5,7 @@ import { useBenchmark } from '../../api/hooks'
 import { LifeClock } from '../../components/LifeClock'
 import { Benchmark } from '../../components/Benchmark'
 import { IntervalBadge, StatisticalEstimateNote, SafeguardNote } from '../../components/framing'
-import { PageHeader, Card, NeedsProfile, ErrorState } from '../../components/ui'
+import { PageHeader, Card, NeedsProfile, NoticeState } from '../../components/ui'
 import { fmtYears } from '../../components/format'
 
 export function LifeClockPage() {
@@ -20,9 +20,12 @@ export function LifeClockPage() {
   )
   useEffect(() => {
     if ((routerLocation.state as { notice?: string } | null)?.notice) {
-      navigate(routerLocation.pathname, { replace: true, state: null })
+      navigate(
+        { pathname: routerLocation.pathname, search: routerLocation.search, hash: routerLocation.hash },
+        { replace: true, state: null },
+      )
     }
-  }, [routerLocation.pathname, routerLocation.state, navigate])
+  }, [routerLocation.pathname, routerLocation.search, routerLocation.hash, routerLocation.state, navigate])
 
   if (!profile || !estimate) {
     return (
@@ -41,7 +44,7 @@ export function LifeClockPage() {
 
       {notice && (
         <div className="mb-5">
-          <ErrorState message={notice} />
+          <NoticeState message={notice} />
           <button type="button" className="btn-ghost mt-1 text-xs" onClick={() => setNotice(null)}>
             Dismiss
           </button>
