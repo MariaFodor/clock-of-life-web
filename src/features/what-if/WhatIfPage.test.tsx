@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { WhatIfPage } from './WhatIfPage'
 import { renderWithProviders, SAMPLE_PROFILE } from '../../test/harness'
@@ -42,7 +42,37 @@ describe('<WhatIfPage/>', () => {
   it('exposes only the modifiable levers as controls', () => {
     renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
     expect(screen.getByRole('slider', { name: /active minutes/i })).toBeInTheDocument()
-    expect(screen.getByRole('slider', { name: /sleep/i })).toBeInTheDocument()
     expect(screen.getByRole('slider', { name: /waist/i })).toBeInTheDocument()
+    // SAMPLE_PROFILE smokes, so the dose is a lever for this person.
+    expect(screen.getByRole('slider', { name: /cigarettes per day/i })).toBeInTheDocument()
+  })
+
+  // This test asserted a Sleep slider existed until the model demoted long sleep to a marker and
+  // the service began refusing the change with a 400. The page kept offering it, and nothing here
+  // noticed, because the mock client honoured what the real backend rejects.
+  it('offers no sleep control, but still shows sleep and says why', () => {
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+    expect(screen.queryByRole('slider', { name: /sleep/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/7\.5 h/)).toBeInTheDocument()
+    expect(screen.getByText(/marker of illness rather than a cause/i)).toBeInTheDocument()
+  })
+
+  it('hides the dose for a non-smoker, who has none to change', () => {
+    renderWithProviders(<WhatIfPage />, { profile: { ...SAMPLE_PROFILE, smoke: 0 } })
+    expect(screen.queryByRole('slider', { name: /cigarettes per day/i })).not.toBeInTheDocument()
+  })
+
+  it('prices cutting down below quitting, and says cutting down is not quitting', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+
+    // 15 a day down to 5: a real gain, with the caveat attached.
+    // fireEvent, not user.clear: clear() is for text inputs and throws on a range.
+    fireEvent.change(screen.getByRole('slider', { name: /cigarettes per day/i }),
+                     { target: { value: '5' } })
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+
+    expect(await screen.findByText(/\+\d+\.\d+ yr/)).toBeInTheDocument()
+    expect(await screen.findByText(/Quitting is worth more/i)).toBeInTheDocument()
   })
 })

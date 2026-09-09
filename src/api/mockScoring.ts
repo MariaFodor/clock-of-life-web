@@ -228,7 +228,22 @@ export function scoreWhatIf(base: Profile, changes: WhatIfChanges): WhatIfResult
     }
   }
   if (changes.pa_min !== undefined) modified.pa_min = changes.pa_min
-  if (changes.sleep !== undefined) modified.sleep = changes.sleep
+  if (changes.cigs_day !== undefined) {
+    if (changes.cigs_day < 0 || changes.cigs_day > 60) {
+      throw new Error('cigarettes per day must be between 0 and 60')
+    }
+    modified.cigs_day = changes.cigs_day
+    // Same honesty the service applies: the per-cigarette gradient is the optimistic reading of
+    // cutting down, and must never present itself as equivalent to stopping.
+    if (modified.smoke === 2 && changes.cigs_day < (base.cigs_day ?? 0) &&
+        (changes.smoke === undefined || changes.smoke === 2)) {
+      note = 'cutting down is priced at the model\'s per-cigarette gradient, which is the ' +
+             'optimistic reading — trials of reduction without quitting show less benefit than ' +
+             'the gradient implies. Quitting is worth more.'
+    }
+  }
+  // Quitting zeroes the dose, matching how the score treats a non-smoker's cigarettes.
+  if (modified.smoke !== 2) modified.cigs_day = 0
   if (changes.waist !== undefined) modified.waist = changes.waist
   if (changes.diet_score !== undefined) modified.diet_score = changes.diet_score
   if (changes.alcohol !== undefined) modified.alcohol = changes.alcohol

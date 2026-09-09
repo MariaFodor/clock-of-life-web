@@ -19,7 +19,11 @@ function summarizeChanges(changes: WhatIfChanges): string {
   const parts: string[] = []
   if (changes.smoke !== undefined) parts.push(`smoking → ${SMOKE_LABEL[changes.smoke]}`)
   if (changes.pa_min !== undefined) parts.push(`activity → ${changes.pa_min.toFixed(0)} MET-min`)
-  if (changes.sleep !== undefined) parts.push(`sleep → ${changes.sleep.toFixed(1)} h`)
+  // Only while the scenario still smokes: "smoking → Never, 5 cigarettes/day" describes nobody, and
+  // the service zeroes the dose on quitting anyway.
+  if (changes.cigs_day !== undefined && (changes.smoke ?? 2) === 2) {
+    parts.push(`${changes.cigs_day.toFixed(0)} cigarettes/day`)
+  }
   if (changes.waist !== undefined) parts.push(`waist → ${changes.waist.toFixed(0)} cm`)
   return parts.length ? parts.join(', ') : 'no change'
 }
@@ -41,8 +45,8 @@ export function WhatIfPage() {
 
   const smoke = changes.smoke ?? profile.smoke
   const pa = changes.pa_min ?? profile.pa_min
-  const sleep = changes.sleep ?? profile.sleep
   const waist = changes.waist ?? profile.waist
+  const cigs = changes.cigs_day ?? profile.cigs_day ?? 0
 
   const run = () => whatif.mutate({ base: profile, changes })
   const reset = () => {
@@ -94,14 +98,33 @@ export function WhatIfPage() {
             display={`${pa.toFixed(0)}`}
             onChange={(v) => setChanges((c) => ({ ...c, pa_min: v }))}
           />
-          <SliderRow
+          {/* Only a current smoker has a dose to change, and only then does the model score one.
+              Showing the slider to a never-smoker would invite a question whose answer is always
+              zero. */}
+          {smoke === 2 && (
+            <SliderRow
+              label="Cigarettes per day"
+              min={0}
+              max={60}
+              step={1}
+              value={cigs}
+              display={`${cigs.toFixed(0)}`}
+              onChange={(v) => setChanges((c) => ({ ...c, cigs_day: v }))}
+            />
+          )}
+          {/* Sleep was a slider here until the model demoted long sleep to a MARKER: illness causes
+              long sleep far more than the reverse, so "sleep less" is advice with no evidence behind
+              it, and the service now refuses the change. Deleting the row outright would have been
+              the easy fix and the wrong one — sleep still moves the estimate and still appears in
+              the breakdown, so hiding it here would look like the model stopped caring. It stays
+              visible and says why it cannot be simulated. */}
+          <MarkerRow
             label="Sleep (hours/night)"
-            min={3}
-            max={12}
-            step={0.5}
-            value={sleep}
-            display={`${sleep.toFixed(1)} h`}
-            onChange={(v) => setChanges((c) => ({ ...c, sleep: v }))}
+            display={`${profile.sleep.toFixed(1)} h`}
+            reason={
+              'Long sleep is a marker of illness rather than a cause of it, so there is no ' +
+              'evidenced effect of changing it to simulate. It still counts in your breakdown.'
+            }
           />
           <SliderRow
             label="Waist (cm)"
@@ -207,6 +230,19 @@ export function WhatIfPage() {
           </table>
         </Card>
       )}
+    </div>
+  )
+}
+
+/** A factor the estimate uses but What-If must not offer: shown, valued, and explained. */
+function MarkerRow({ label, display, reason }: { label: string; display: string; reason: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-clock-line p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="label text-clock-muted">{label}</span>
+        <span className="text-sm font-medium text-clock-muted">{display}</span>
+      </div>
+      <p className="text-xs text-clock-muted">{reason}</p>
     </div>
   )
 }
