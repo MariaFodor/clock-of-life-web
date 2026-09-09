@@ -23,11 +23,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ThemeProvider>
-          <AuthProvider>
-            <ProfileProvider>
+          {/* ProfileProvider wraps AuthProvider so logout can reset the in-memory profile/estimate. */}
+          <ProfileProvider>
+            <AuthProvider>
               <App />
-            </ProfileProvider>
-          </AuthProvider>
+            </AuthProvider>
+          </ProfileProvider>
         </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>

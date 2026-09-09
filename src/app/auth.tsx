@@ -2,9 +2,11 @@
 // token; we hold the token (see api/token.ts) and a light session marker so a reload stays signed in.
 // No password is ever stored client-side.
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { getClient } from '../api/client'
 import { getToken, setToken } from '../api/token'
+import { useProfile } from './profile'
 
 interface Session {
   accountId: string
@@ -34,16 +36,36 @@ function readStored(): Session | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(readStored)
+  const queryClient = useQueryClient()
+  const { reset: resetProfile } = useProfile()
+  // Mirror of `session` so persist() can read the current account without re-creating callbacks.
+  const sessionRef = useRef<Session | null>(session)
+  sessionRef.current = session
 
-  const persist = useCallback((s: Session, token: string) => {
-    setToken(token)
-    setSession(s)
-    try {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(s))
-    } catch {
-      /* storage may be unavailable — session still works in-memory */
-    }
-  }, [])
+  // Account boundaries wipe all per-account client state — the cached queries (history, answers)
+  // and the in-memory profile/estimate — so a following sign-in can never see the previous
+  // account's data (REVIEW-2026-09-09 W2).
+  const clearAccountState = useCallback(() => {
+    queryClient.clear()
+    resetProfile()
+  }, [queryClient, resetProfile])
+
+  const persist = useCallback(
+    (s: Session, token: string) => {
+      // Token first, so nothing refetched by the wipe below can go out under the old identity;
+      // and a same-account re-login (e.g. after token expiry) keeps its state — the wipe is only
+      // for an actual account change.
+      setToken(token)
+      if (sessionRef.current && sessionRef.current.accountId !== s.accountId) clearAccountState()
+      setSession(s)
+      try {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(s))
+      } catch {
+        /* storage may be unavailable — session still works in-memory */
+      }
+    },
+    [clearAccountState],
+  )
 
   const register = useCallback(
     async (email: string, password: string) => {
@@ -64,12 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setToken(null)
     setSession(null)
+    clearAccountState()
     try {
       localStorage.removeItem(SESSION_KEY)
     } catch {
       /* ignore */
     }
-  }, [])
+  }, [clearAccountState])
 
   const value = useMemo(() => ({ session, register, login, logout }), [session, register, login, logout])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

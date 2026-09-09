@@ -62,11 +62,9 @@ export function renderWithProviders(ui: ReactElement, opts: Options = {}) {
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <ThemeProvider>
-          <AuthProvider>
-            <ProfileProvider initialProfile={opts.profile ?? null} initialEstimate={opts.estimate ?? null}>
-              {children}
-            </ProfileProvider>
-          </AuthProvider>
+          <ProfileProvider initialProfile={opts.profile ?? null} initialEstimate={opts.estimate ?? null}>
+            <AuthProvider>{children}</AuthProvider>
+          </ProfileProvider>
         </ThemeProvider>
       </MemoryRouter>
     </QueryClientProvider>
