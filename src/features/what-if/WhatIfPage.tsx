@@ -56,19 +56,28 @@ export function WhatIfPage() {
   // effective doses for exactly this reason; the control has to start from the same number, or it
   // argues with the answer it produces.
   const imputedDose = profile.smoke === 2 && !profile.cigs_day
-  // ceil, not round: 12.18 rounds DOWN to 12, which sits below the effective dose — so an undeclared
-  // smoker who nudged the slider and put it back where it started got a no-op priced as "cutting
-  // down". Seeding at or above the effective dose removes that, at the cost of nothing.
+  // ceil, not round: 12.18 rounds DOWN to 12, which sits below the effective dose, so the seed
+  // itself read as a reduction. ceil is not free either — 13 sits above it, and submitting the seed
+  // would charge 0.1 years for standing still. That is why `submitted()` below drops the field
+  // instead; the rounding only decides which way the phantom would have pointed.
   const cigs = changes.cigs_day ?? Math.ceil(effectiveCigsDay(profile))
 
-  const run = () => whatif.mutate({ base: profile, changes })
+  // Dragging the dose away and back to where it started is not a change, and must not be priced as
+  // one. The slider is integer while the imputed dose is 12.18, so NO integer seed round-trips
+  // cleanly: 12 came in under it and got a "cutting down" note on a no-op, 13 sits above it and
+  // costs a phantom 0.1 years in red. Neither rounding fixes that — dropping the field does. What
+  // the user did was nothing, so nothing is what we send.
+  const submitted = (): WhatIfChanges =>
+    imputedDose && changes.cigs_day === cigs ? { ...changes, cigs_day: undefined } : changes
+
+  const run = () => whatif.mutate({ base: profile, changes: submitted() })
   const reset = () => {
     setChanges({})
     whatif.reset()
   }
   const save = () => {
     if (!whatif.data) return
-    setScenarios((prev) => [...prev, { id: Date.now(), summary: summarizeChanges(changes, profile.smoke), result: whatif.data! }])
+    setScenarios((prev) => [...prev, { id: Date.now(), summary: summarizeChanges(submitted(), profile.smoke), result: whatif.data! }])
   }
 
   // Best = the largest gain in years (ties broken by insertion order).

@@ -158,14 +158,24 @@ describe('mock ↔ bundle parity (literature levers)', () => {
   // one copy too many, so it is pinned character-for-character.
   it("the reduction note matches the service's, word for word", () => {
     const src = readFileSync(SCORING_RS, 'utf8')
+    // Line-anchored and counted, like every other reader in this file. Unanchored `.exec` took the
+    // first hit, so a one-line commented-out copy above the real const silently won the match and
+    // the suite went green while the two repos had actually drifted — demonstrated in review.
     // [\s\S] not . — the literal's line continuations are backslash-NEWLINE, which `.` cannot cross.
-    const m = /const REDUCTION_NOTE: &str =\s*("(?:[^"\\]|\\[\s\S])*")\s*;/.exec(src)
-    if (!m) {
+    const hits = [
+      ...src.matchAll(/^\s*(?:pub )?const REDUCTION_NOTE: &str =\s*("(?:[^"\\]|\\[\s\S])*")\s*;/gm),
+    ]
+    if (hits.length !== 1) {
       throw new Error(
-        `Could not find REDUCTION_NOTE in ${SCORING_RS}. If the service renamed or restructured it, ` +
-          'update this reader — do not drop the pin, the two copies drifted the moment they existed.',
+        hits.length === 0
+          ? `Could not find REDUCTION_NOTE in ${SCORING_RS}. If the service renamed or ` +
+            'restructured it, update this reader — do not drop the pin, the two copies drifted ' +
+            'the moment they existed.'
+          : `${SCORING_RS} declares REDUCTION_NOTE ${hits.length} times; this reader cannot tell ` +
+            'which one the service returns.',
       )
     }
+    const m = hits[0]
     // Rebuild the Rust literal: `\` at end-of-line eats the newline AND the following indentation.
     const fromService = m[1]
       .slice(1, -1)

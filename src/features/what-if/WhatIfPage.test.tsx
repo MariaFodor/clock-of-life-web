@@ -73,6 +73,22 @@ describe('<WhatIfPage/>', () => {
     expect(screen.getByText(/13 \(assumed\)/)).toBeInTheDocument()
   })
 
+  it('treats dragging the dose back to its start as no change at all', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<WhatIfPage />, {
+      profile: { ...SAMPLE_PROFILE, smoke: 2, cigs_day: 0 },
+    })
+    const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
+    // Away, and back to the seed. The slider is integer and the imputed dose is 12.18, so the seed
+    // is never exactly it — 12 priced a no-op as cutting down, 13 charged 0.1 years for it.
+    fireEvent.change(dose, { target: { value: '20' } })
+    fireEvent.change(dose, { target: { value: '13' } })
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+
+    expect(await screen.findByText(/±0\.0 yr|\+0\.0 yr/)).toBeInTheDocument()
+    expect(screen.queryByText(/Quitting is worth much more/i)).not.toBeInTheDocument()
+  })
+
   it('never offers a zero dose, which the model reads as unanswered rather than as quitting', () => {
     renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
     // min=1: the service refuses a zero dose from a smoker, because scoring it would impute the

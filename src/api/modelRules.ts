@@ -2,10 +2,12 @@
 // pinned against the service by mockScoring.parity.test.ts.
 //
 // (An earlier version of this comment claimed the split also kept the dev scoring engine out of the
-// production bundle. Review built the counterfactual and the two bundles were byte-identical —
-// Rollup tree-shakes per declaration, not per module, so importing one pure const from mockScoring
-// never pulled scoreWhatIf with it. The real reason is the one above, and a duplicated rule that
-// had already drifted twice.)
+// production bundle. It does not: Rollup tree-shakes per declaration, not per module, so importing
+// one pure const from mockScoring never pulled scoreWhatIf with it, and main.tsx gates the mock
+// behind an env flag that is folded away at build time. Measured, the counterfactual bundle is the
+// same code in a different module order — same length and same characters, different hash. So the
+// split changes nothing about what ships. The real reason is the one above, plus a duplicated rule
+// that had already drifted twice.)
 
 import type { Profile } from './types'
 
