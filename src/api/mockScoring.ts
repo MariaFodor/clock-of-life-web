@@ -13,6 +13,15 @@ interface Standardizer {
   mean: number
   sd: number
 }
+/** The bundle's shipped literature standardizers (model-v2.2.0) — pinned by a parity test. */
+// Object.freeze is shallow, so the nested entries are frozen too — otherwise
+// `LITERATURE_STD.diet.mean = 9` would silently change live scoring, since STD spreads references.
+export const LITERATURE_STD: Readonly<Record<string, Readonly<Standardizer>>> = Object.freeze({
+  diet: Object.freeze({ mean: 2.5, sd: 1.12 }),      // Mediterranean-style item sum 0-5
+  sedentary: Object.freeze({ mean: 6.0, sd: 2.5 }),  // daily sitting hours
+  stress: Object.freeze({ mean: 6.11, sd: 3.14 }),   // PSS-4 sum 0-16 (Warttig 2013 norms)
+})
+
 const STD: Record<string, Standardizer> = {
   activity: { mean: 6.0, sd: 1.3 }, // ln(MET-min/week + 1)
   waist: { mean: 94, sd: 13 },
@@ -20,19 +29,23 @@ const STD: Record<string, Standardizer> = {
   bmi: { mean: 28.9, sd: 6.7 },       // kg/m²
   cigs_day: { mean: 2.6, sd: 6.7 },   // current-smoker cigarettes/day
   sbp: { mean: 123, sd: 18 },         // systolic BP (mmHg)
-  // Literature levers — the bundle's shipped standardizers (model-v2.2.0 coefficients.json).
-  diet: { mean: 2.5, sd: 1.12 },      // Mediterranean-style item sum 0-5
-  sedentary: { mean: 6.0, sd: 2.5 },  // daily sitting hours
-  stress: { mean: 6.11, sd: 3.14 },   // PSS-4 sum 0-16 (Warttig 2013 norms)
+  ...LITERATURE_STD,
 }
 
 /** Alcohol log-hazard by level, centred on "light" — monotonic, never protective (RES-02). */
-const ALCOHOL_LEVELS: Record<string, number> = { none: 0.0, light: 0.03, moderate: 0.12, heavy: 0.3 }
-const ALCOHOL_REFERENCE = ALCOHOL_LEVELS.light
+export const ALCOHOL_LEVELS: Readonly<Record<string, number>> = Object.freeze({
+  none: 0.0,
+  light: 0.03,
+  moderate: 0.12,
+  heavy: 0.3,
+})
+/** The level the alcohol term is centred on — the bundle's `literature.alcohol.reference.level`. */
+export const ALCOHOL_REFERENCE_LEVEL = 'light'
+const ALCOHOL_REFERENCE = ALCOHOL_LEVELS[ALCOHOL_REFERENCE_LEVEL]
 
 /** ENV term (RES-04), same formula as scoring.rs. */
-const RO_PM25_REF = 14.0
-const RO_NDVI_REF = 0.5
+export const RO_PM25_REF = 14.0
+export const RO_NDVI_REF = 0.5
 function envTerm(pm25?: number, ndvi?: number): number {
   const air = pm25 === undefined ? 0 : Math.log(1.095) * (pm25 - RO_PM25_REF) / 10
   const green = ndvi === undefined ? 0 : Math.log(0.965) * (ndvi - RO_NDVI_REF) / 0.1
@@ -40,7 +53,21 @@ function envTerm(pm25?: number, ndvi?: number): number {
 }
 const z = (raw: number, key: string) => (raw - STD[key].mean) / STD[key].sd
 
-/** Log-hazard coefficients (illustrative). Positive = shortens life. */
+/** What the scorer actually uses for a key — the parity guard asserts against THIS, not the
+ *  source objects, so a later override in STD/BETA cannot pass unnoticed. */
+// Returns a copy: handing out a live reference to STD[key] would widen the mutation surface this
+// module just closed.
+export const effectiveStandardizer = (key: string): Standardizer => ({ ...STD[key] })
+export const effectiveBeta = (key: string): number => BETA[key]
+
+/** The bundle's shipped literature betas (per +1 SD) — pinned by a parity test. */
+export const LITERATURE_BETA: Readonly<Record<string, number>> = Object.freeze({
+  diet: -0.15,
+  sedentary: 0.08,
+  stress: 0.05,
+})
+
+/** Log-hazard coefficients (illustrative for the fitted terms). Positive = shortens life. */
 const BETA: Record<string, number> = {
   smk_former: 0.22,
   smk_current: 0.62,
@@ -57,10 +84,7 @@ const BETA: Record<string, number> = {
   cancer_hx: 0.55,
   education: -0.1,
   income: -0.09,
-  // Literature levers — the bundle's shipped betas (per +1 SD; alcohol is handled by level).
-  diet: -0.15,
-  sedentary: 0.08,
-  stress: 0.05,
+  ...LITERATURE_BETA,
   mobility: 0.32,
 }
 
