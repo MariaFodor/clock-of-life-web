@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { InterviewPage } from './InterviewPage'
 import { renderWithProviders } from '../../test/harness'
+import { createMockClient } from '../../api/mockClient'
 
 function InterviewUnderRouter() {
   return (
@@ -78,5 +79,40 @@ describe('LEV-04 additions', () => {
   it('offers the location picker from /api/locations', async () => {
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
     expect(await screen.findByLabelText(/where do you live/i)).toBeInTheDocument()
+  })
+})
+
+describe('LEV-04 failure paths', () => {
+  it('carries a home-location failure to the Life Clock instead of blocking or vanishing', async () => {
+    const user = userEvent.setup()
+    const client = createMockClient()
+    client.setHomeLocation = async () => {
+      throw new Error('service unavailable')
+    }
+    renderWithProviders(
+      <Routes>
+        <Route path="/interview" element={<InterviewPage />} />
+        <Route path="/" element={<div>LIFE CLOCK HOME</div>} />
+      </Routes>,
+      { route: '/interview', client },
+    )
+
+    const picker = await screen.findByLabelText(/where do you live/i)
+    await user.selectOptions(picker, 'Cluj-Napoca')
+    await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
+
+    // The estimate still lands (the ENV term already reached it) — the failure must not trap the user.
+    expect(await screen.findByText('LIFE CLOCK HOME')).toBeInTheDocument()
+  })
+
+  it('explains itself when the location list cannot be loaded', async () => {
+    const client = createMockClient()
+    client.listLocations = async () => {
+      throw new Error('offline')
+    }
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview', client })
+    expect(await screen.findByText(/could not load the list of locations/i)).toBeInTheDocument()
+    // and it never blocks the estimate
+    expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeEnabled()
   })
 })

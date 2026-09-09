@@ -232,7 +232,14 @@ export function createHttpClient(): ApiClient {
 
       const current: Location = res.from
         ? { id: res.from.name, name: res.from.name, pm25: res.from.pm25, ndvi: res.from.ndvi, kind: 'city' }
-        : { id: 'current', name: 'your current area', pm25: profile.pm25 ?? 0, ndvi: profile.ndvi ?? 0, kind: 'city' }
+        : {
+            id: 'current',
+            name: 'your current area',
+            // Unknown stays unknown — 0 µg/m³ would read as pristine air (PR#1 N1).
+            pm25: profile.pm25,
+            ndvi: profile.ndvi,
+            kind: 'city',
+          }
       const candidate: Location = { id: res.to.name, name: res.to.name, pm25: res.to.pm25, ndvi: res.to.ndvi, kind: 'city' }
       const air = res.breakdown.air_delta_years
       const green = res.breakdown.greenspace_delta_years

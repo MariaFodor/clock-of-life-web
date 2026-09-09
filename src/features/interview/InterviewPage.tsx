@@ -181,7 +181,6 @@ function Field({
 export function InterviewPage() {
   const [answers, setAnswers] = useState<Answers>(DEFAULT_ANSWERS)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [locationError, setLocationError] = useState<string | null>(null)
   const navigate = useNavigate()
   const { setProfile, setEstimate } = useProfile()
   const estimate = useEstimate()
@@ -193,7 +192,6 @@ export function InterviewPage() {
 
   const onSubmit = async () => {
     setSubmitError(null)
-    setLocationError(null)
     if (errors.length) return
     // Every /api/estimate call persists a calculation row, so a save-only retry must not re-score
     // an unchanged profile — that would append one duplicate history row per click.
@@ -227,18 +225,19 @@ export function InterviewPage() {
     // via the profile's pm25/ndvi, and the stored row only powers "Where Should I Live?" later —
     // so say what actually failed and let the user through (PR#1 B1).
     const loc = answers.LOCATION as LocationAnswer | undefined
+    let locationError: string | undefined
     if (loc?.name) {
       try {
         await getClient().setHomeLocation(loc.name, loc.country)
       } catch (e) {
-        setLocationError(
-          `Your answers were saved, but we could not record ${loc.name} as your home location (${
-            e instanceof Error ? e.message : 'unknown error'
-          }). You can set it again later from "Where Should I Live?".`,
-        )
+        // The message must survive the navigation — this component unmounts immediately, so local
+        // state here would render nothing at all (PR#1 B1, round 2).
+        locationError = `Your answers were saved, but we could not record ${loc.name} as your home location (${
+          e instanceof Error ? e.message : 'unknown error'
+        }). You can set it again later from "Where Should I Live?".`
       }
     }
-    navigate('/')
+    navigate('/', locationError ? { state: { notice: locationError } } : undefined)
   }
 
   return (
@@ -303,11 +302,6 @@ export function InterviewPage() {
       {submitError && (
         <div className="mt-5">
           <ErrorState message={submitError} />
-        </div>
-      )}
-      {locationError && (
-        <div className="mt-5">
-          <ErrorState message={locationError} />
         </div>
       )}
 

@@ -247,7 +247,7 @@ const FACTORS: FactorSpec[] = [
   { key: 'alcohol', factor: 'Alcohol', role: 'lever', evidence: 'strong', citation: 'RES-02 · GBD 2018/2020', toReference: (p) => ({ ...p, alcohol: undefined }) },
   { key: 'sedentary', factor: 'Sitting time', role: 'lever', evidence: 'moderate', citation: 'RES-03 · Chau 2013', toReference: (p) => ({ ...p, sitting_hours: undefined }) },
   { key: 'stress', factor: 'Perceived stress', role: 'lever', evidence: 'weak', citation: 'RES-03 · Cohen 1983 PSS', toReference: (p) => ({ ...p, stress_score: undefined }) },
-  { key: 'mobility', factor: 'Mobility limitation', role: 'context', evidence: 'moderate', citation: 'EXP-11 · NHANES PFQ', toReference: (p) => ({ ...p, mobility: undefined }) },
+  { key: 'mobility', factor: 'Mobility limitation', role: 'context', evidence: 'strong', citation: 'EXP-11 · NHANES PFQ', toReference: (p) => ({ ...p, mobility: undefined }) },
 ]
 
 /** Per-factor Δyears vs the reference person (positive = adds years). Sorted by magnitude. */

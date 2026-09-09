@@ -216,17 +216,19 @@ export function createMockClient(): ApiClient {
       const base = scoreEstimate(profile).estimate_years
       const scenario = base * Math.pow(Math.exp(dLogHazard), -0.4)
       const delta = round1(scenario - base)
-      const cleaner =
-        candidate.pm25 !== undefined && current.pm25 !== undefined
-          ? candidate.pm25 < current.pm25
-          : false
+      const comparable = candidate.pm25 !== undefined && current.pm25 !== undefined
+      const cleaner = comparable && candidate.pm25! < current.pm25!
       return {
         current,
         candidate,
         delta_years: delta,
-        explanation: cleaner
-          ? `${candidate.name} has cleaner air (PM2.5 ${candidate.pm25} vs ${current.pm25} µg/m³) and more greenspace.`
-          : `${candidate.name} has higher PM2.5 (${candidate.pm25} vs ${current.pm25} µg/m³) than your current area.`,
+        // Never state a comparison we cannot make: an unknown exposure on either side gets its
+        // own branch instead of an "undefined vs undefined" claim (PR#1 round-2 note).
+        explanation: !comparable
+          ? `We don't have air-quality data for one of these areas, so this comparison covers only what we could measure.`
+          : cleaner
+            ? `${candidate.name} has cleaner air (PM2.5 ${candidate.pm25} vs ${current.pm25} µg/m³) and more greenspace.`
+            : `${candidate.name} has higher PM2.5 (${candidate.pm25} vs ${current.pm25} µg/m³) than your current area.`,
       }
     },
 

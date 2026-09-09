@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { LifeClockPage } from './LifeClockPage'
 import { renderWithProviders, SAMPLE_PROFILE, SAMPLE_ESTIMATE } from '../../test/harness'
 
@@ -34,5 +35,19 @@ describe('<LifeClockPage/>', () => {
       estimate: { ...SAMPLE_ESTIMATE, estimate_years: 0.5, reaches_age: 80 },
     })
     expect(screen.getByText(/not a statement about you personally/i)).toBeInTheDocument()
+  })
+})
+
+describe('carried notices', () => {
+  it('shows a notice handed over by the interview and lets the user dismiss it', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<LifeClockPage />, {
+      profile: SAMPLE_PROFILE,
+      estimate: SAMPLE_ESTIMATE,
+      routerState: { notice: 'could not record Cluj-Napoca as your home location' },
+    })
+    expect(await screen.findByText(/could not record Cluj-Napoca/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
+    expect(screen.queryByText(/could not record Cluj-Napoca/i)).not.toBeInTheDocument()
   })
 })
