@@ -14,10 +14,12 @@ interface Standardizer {
   sd: number
 }
 /** The bundle's shipped literature standardizers (model-v2.2.0) — pinned by a parity test. */
-export const LITERATURE_STD: Readonly<Record<string, Standardizer>> = Object.freeze({
-  diet: { mean: 2.5, sd: 1.12 },      // Mediterranean-style item sum 0-5
-  sedentary: { mean: 6.0, sd: 2.5 },  // daily sitting hours
-  stress: { mean: 6.11, sd: 3.14 },   // PSS-4 sum 0-16 (Warttig 2013 norms)
+// Object.freeze is shallow, so the nested entries are frozen too — otherwise
+// `LITERATURE_STD.diet.mean = 9` would silently change live scoring, since STD spreads references.
+export const LITERATURE_STD: Readonly<Record<string, Readonly<Standardizer>>> = Object.freeze({
+  diet: Object.freeze({ mean: 2.5, sd: 1.12 }),      // Mediterranean-style item sum 0-5
+  sedentary: Object.freeze({ mean: 6.0, sd: 2.5 }),  // daily sitting hours
+  stress: Object.freeze({ mean: 6.11, sd: 3.14 }),   // PSS-4 sum 0-16 (Warttig 2013 norms)
 })
 
 const STD: Record<string, Standardizer> = {
@@ -53,7 +55,9 @@ const z = (raw: number, key: string) => (raw - STD[key].mean) / STD[key].sd
 
 /** What the scorer actually uses for a key — the parity guard asserts against THIS, not the
  *  source objects, so a later override in STD/BETA cannot pass unnoticed. */
-export const effectiveStandardizer = (key: string): Standardizer => STD[key]
+// Returns a copy: handing out a live reference to STD[key] would widen the mutation surface this
+// module just closed.
+export const effectiveStandardizer = (key: string): Standardizer => ({ ...STD[key] })
 export const effectiveBeta = (key: string): number => BETA[key]
 
 /** The bundle's shipped literature betas (per +1 SD) — pinned by a parity test. */

@@ -18,7 +18,9 @@ import {
   effectiveStandardizer,
   RO_NDVI_REF,
   RO_PM25_REF,
+  relativeRisk,
 } from './mockScoring'
+import type { Profile } from './types'
 
 // Pinned to the bundle version the service defaults to (its src/main.rs). Resolved relative to this
 // file where the runner exposes a file URL, else relative to the working directory — so the suite
@@ -61,10 +63,20 @@ const bundle = JSON.parse(readFileSync(BUNDLE, 'utf8')) as {
 
 // The service's own ENV reference points live in code, not the bundle — read them from the source
 // of truth rather than restating them here, which would make the assertion a tautology (gap 3).
+const SCORING_RS = resolve(SERVICE_DIR, 'src/scoring.rs')
 function serviceConst(name: string): number {
-  const src = readFileSync(resolve(SERVICE_DIR, 'src/scoring.rs'), 'utf8')
-  const m = new RegExp(`pub const ${name}: f64 = ([0-9.]+);`).exec(src)
-  if (!m) throw new Error(`could not find ${name} in the service's scoring.rs`)
+  if (!existsSync(SCORING_RS)) {
+    throw new Error(`Parity fixture missing: ${SCORING_RS} (the service's ENV constants live there).`)
+  }
+  const src = readFileSync(SCORING_RS, 'utf8')
+  // Line-anchored, so a commented-out declaration can never be matched instead.
+  const m = new RegExp(`^\\s*pub const ${name}: f64 = ([0-9.]+);`, 'm').exec(src)
+  if (!m) {
+    throw new Error(
+      `could not find "pub const ${name}: f64 = <number>;" in ${SCORING_RS} — if the service ` +
+        'changed how it declares the ENV reference points, update this parity test with it.',
+    )
+  }
   return Number(m[1])
 }
 
@@ -83,6 +95,20 @@ describe('mock ↔ bundle parity (literature levers)', () => {
   it('alcohol levels match the bundle, and both centre on the same level', () => {
     expect(ALCOHOL_LEVELS).toEqual(bundle.literature.alcohol.levels)
     expect(ALCOHOL_REFERENCE_LEVEL).toBe(bundle.literature.alcohol.reference?.level)
+  })
+
+  it.each(CONTINUOUS)('%s: a +1 SD answer moves the score by exactly its beta', (key) => {
+    // The accessors could still drift from the arithmetic if z() ever read a different map, so
+    // assert the behaviour: a one-standard-deviation answer must move the linear predictor by
+    // exactly the bundle's beta (PR#2 review, residual note on gap 1).
+    const { mean, sd } = effectiveStandardizer(key)
+    const field = { diet: 'diet_score', sedentary: 'sitting_hours', stress: 'stress_score' }[key]!
+    const base: Profile = {
+      country: 'RO', age: 50, sex: 'M', smoke: 0, pa_min: 600, sleep: 7, waist: 94, bmi: 28.9,
+    }
+    const atMean = Math.log(relativeRisk({ ...base, [field]: mean }))
+    const plusOneSd = Math.log(relativeRisk({ ...base, [field]: mean + sd }))
+    expect(plusOneSd - atMean).toBeCloseTo(bundle.literature[key].beta!, 10)
   })
 
   it('the environment reference points match the service constants', () => {

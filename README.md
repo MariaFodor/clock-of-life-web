@@ -63,10 +63,3 @@ src/
   features/    # one folder per surface (+ interview, login), each with its own test
   test/        # setup + a providers harness (renderWithProviders)
 ```
-
-## Running the tests
-
-`npm test` includes a parity test that reads the sibling `clock-of-life-service` checkout's
-vendored model bundle (it pins the mock scorer's literature coefficients to the shipped ones).
-Clone both repos side by side, or that one file fails at collection with a message saying
-exactly what is missing.
