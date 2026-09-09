@@ -14,11 +14,11 @@ interface Standardizer {
   sd: number
 }
 /** The bundle's shipped literature standardizers (model-v2.2.0) — pinned by a parity test. */
-export const LITERATURE_STD: Record<string, Standardizer> = {
+export const LITERATURE_STD: Readonly<Record<string, Standardizer>> = Object.freeze({
   diet: { mean: 2.5, sd: 1.12 },      // Mediterranean-style item sum 0-5
   sedentary: { mean: 6.0, sd: 2.5 },  // daily sitting hours
   stress: { mean: 6.11, sd: 3.14 },   // PSS-4 sum 0-16 (Warttig 2013 norms)
-}
+})
 
 const STD: Record<string, Standardizer> = {
   activity: { mean: 6.0, sd: 1.3 }, // ln(MET-min/week + 1)
@@ -31,8 +31,15 @@ const STD: Record<string, Standardizer> = {
 }
 
 /** Alcohol log-hazard by level, centred on "light" — monotonic, never protective (RES-02). */
-export const ALCOHOL_LEVELS: Record<string, number> = { none: 0.0, light: 0.03, moderate: 0.12, heavy: 0.3 }
-const ALCOHOL_REFERENCE = ALCOHOL_LEVELS.light
+export const ALCOHOL_LEVELS: Readonly<Record<string, number>> = Object.freeze({
+  none: 0.0,
+  light: 0.03,
+  moderate: 0.12,
+  heavy: 0.3,
+})
+/** The level the alcohol term is centred on — the bundle's `literature.alcohol.reference.level`. */
+export const ALCOHOL_REFERENCE_LEVEL = 'light'
+const ALCOHOL_REFERENCE = ALCOHOL_LEVELS[ALCOHOL_REFERENCE_LEVEL]
 
 /** ENV term (RES-04), same formula as scoring.rs. */
 export const RO_PM25_REF = 14.0
@@ -44,8 +51,17 @@ function envTerm(pm25?: number, ndvi?: number): number {
 }
 const z = (raw: number, key: string) => (raw - STD[key].mean) / STD[key].sd
 
+/** What the scorer actually uses for a key — the parity guard asserts against THIS, not the
+ *  source objects, so a later override in STD/BETA cannot pass unnoticed. */
+export const effectiveStandardizer = (key: string): Standardizer => STD[key]
+export const effectiveBeta = (key: string): number => BETA[key]
+
 /** The bundle's shipped literature betas (per +1 SD) — pinned by a parity test. */
-export const LITERATURE_BETA: Record<string, number> = { diet: -0.15, sedentary: 0.08, stress: 0.05 }
+export const LITERATURE_BETA: Readonly<Record<string, number>> = Object.freeze({
+  diet: -0.15,
+  sedentary: 0.08,
+  stress: 0.05,
+})
 
 /** Log-hazard coefficients (illustrative for the fitted terms). Positive = shortens life. */
 const BETA: Record<string, number> = {
