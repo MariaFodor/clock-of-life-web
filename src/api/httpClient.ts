@@ -60,7 +60,12 @@ const get = <T>(path: string) => request<T>(path)
 // Conservative by construction: an unknown or missing grade is shown as ungraded ('na'),
 // never promoted to a stronger-looking one (REVIEW-2026-09-09 W3).
 const asGrade = (g: string | null | undefined): EvidenceGrade =>
-  (EVIDENCE_GRADES as readonly string[]).includes(g ?? '') ? (g as EvidenceGrade) : 'na'
+  // alcohol's bundle grade is "strong_for_harm" — strong evidence, harm-directional (RES-02).
+  g === 'strong_for_harm'
+    ? 'strong'
+    : (EVIDENCE_GRADES as readonly string[]).includes(g ?? '')
+      ? (g as EvidenceGrade)
+      : 'na'
 
 const asRole = (r: string): FactorRole =>
   r === 'lever' || r === 'manage' || r === 'context' || r === 'baseline' ? r : 'context'
@@ -158,6 +163,10 @@ export function createHttpClient(): ApiClient {
 
     async saveAnswers(answers: AnswerInput[]): Promise<{ saved: number }> {
       return post<{ saved: number }>('/answers', { answers })
+    },
+
+    async setHomeLocation(name: string, country: string): Promise<void> {
+      await post<unknown>('/profile/location', { name, country })
     },
 
     async getBenchmark(profile: Profile): Promise<Benchmark> {

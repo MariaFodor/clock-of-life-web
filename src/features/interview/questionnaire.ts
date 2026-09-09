@@ -1,15 +1,14 @@
 // The onboarding questionnaire (THE_QUESTIONNAIRE.md, DES-01) as data.
 //
-// Every question carries its user-facing wording, its "why we ask", and — where the v1 model scores it —
-// how it maps into the Profile. Questions the v1 model does not yet score (diet, alcohol, stress, mood,
-// location) are still asked and persisted via /api/answers; they are flagged `scored: false` so the UI
-// can be honest that they don't move the current estimate. (v2.1 added BMI from height+weight, a
-// current-smoking dose from CIGS, and an optional systolic-BP reading — clock_dev EXP-14, +0.027
-// out-of-sample C-index. SBP is optional: blank → the service derives it from the high-BP answer.)
+// Every question carries its user-facing wording, its "why we ask", and how it maps into the Profile.
+// Since LEV-02..04 every lever moves the estimate: diet (Mediterranean score), alcohol, sitting time,
+// stress (PSS-4) and location (ENV) are scored via the bundle's literature coefficients; mood (PHQ-2)
+// stays deliberately OUT of the risk score (EXP-12 artifact) and drives the support note instead.
+// Only YEARS_QUIT (pending the cessation-decay research) and AREA remain unscored context.
 
 import type { Profile } from '../../api/types'
 
-export type QuestionType = 'number' | 'radio' | 'checkboxes'
+export type QuestionType = 'number' | 'radio' | 'checkboxes' | 'battery' | 'location'
 
 export interface Option {
   value: string
@@ -28,6 +27,8 @@ export interface Question {
   prompt: string
   type: QuestionType
   options?: Option[]
+  /** battery questions: one prompt per sub-item, all sharing `options`; the answer is an array */
+  items?: string[]
   unit?: string
   /** shown only when this predicate over the current answers holds */
   showWhen?: (a: Answers) => boolean
@@ -42,7 +43,15 @@ export interface Section {
   questions: Question[]
 }
 
-export type Answers = Record<string, string | string[] | number | undefined>
+/** A location answer carries the looked-up exposure values captured at selection time. */
+export interface LocationAnswer {
+  name: string
+  country: string
+  pm25?: number
+  ndvi?: number
+}
+
+export type Answers = Record<string, string | string[] | number | number[] | LocationAnswer | undefined>
 
 const FREQ: Option[] = [
   { value: 'never', label: 'Never / rarely' },
@@ -96,7 +105,7 @@ export const SECTIONS: Section[] = [
     title: 'Movement',
     whyWeAsk: 'How much you move — and how much you sit — both matter, and both are things you can change.',
     questions: [
-      { code: 'ACT_DAYS', apiCode: 'Q8_activity_days', prompt: 'In a typical week, how many days do you do at least moderate physical activity?', type: 'radio', scored: true,
+      { code: 'ACT_DAYS', apiCode: 'Q8_activity_days', prompt: 'In a typical week, how many days do you do at least moderate physical activity — enough to raise your breathing or heart rate (brisk walking, cycling, sport, hard housework)?', type: 'radio', scored: true,
         options: [0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) })) },
       { code: 'ACT_MIN', apiCode: 'Q9_activity_minutes', prompt: 'On those days, about how many minutes each time?', type: 'radio', scored: true, options: [
         { value: 'u15', label: 'Under 15' },
@@ -105,7 +114,7 @@ export const SECTIONS: Section[] = [
         { value: '45-59', label: '45–59' },
         { value: '60+', label: '60+ minutes' },
       ] },
-      { code: 'SEDENTARY', apiCode: 'Q10_sedentary', prompt: 'On a typical day, about how many hours do you spend sitting or looking at a screen?', type: 'radio', scored: false, options: [
+      { code: 'SEDENTARY', apiCode: 'Q10_sedentary', prompt: 'On a typical day, about how many hours do you spend sitting or looking at a screen (outside of sleep)?', type: 'radio', scored: true, options: [
         { value: 'u4', label: 'Under 4' },
         { value: '4-6', label: '4–6' },
         { value: '6-8', label: '6–8' },
@@ -143,18 +152,18 @@ export const SECTIONS: Section[] = [
     whyWeAsk: 'A more Mediterranean-style pattern is one of the best-evidenced dietary links to longevity.',
     confidence: 'high',
     questions: [
-      { code: 'DIET_VEG', apiCode: 'Q13_veg', prompt: 'How often do you eat vegetables?', type: 'radio', scored: false, options: FREQ },
-      { code: 'DIET_FRUIT', apiCode: 'Q14_fruit_nuts', prompt: 'How often do you eat fruit or nuts?', type: 'radio', scored: false, options: FREQ },
-      { code: 'DIET_GRAIN', apiCode: 'Q15_whole_grains', prompt: 'How often do you eat whole grains?', type: 'radio', scored: false, options: FREQ },
-      { code: 'DIET_FISH', apiCode: 'Q16_fish', prompt: 'How often do you eat fish or seafood?', type: 'radio', scored: false, options: FREQ },
-      { code: 'DIET_MEAT', apiCode: 'Q17_red_meat', prompt: 'How often do you eat red or processed meat?', type: 'radio', scored: false, options: FREQ },
+      { code: 'DIET_VEG', apiCode: 'Q13_veg', prompt: 'How often do you eat vegetables?', type: 'radio', scored: true, options: FREQ },
+      { code: 'DIET_FRUIT', apiCode: 'Q14_fruit_nuts', prompt: 'How often do you eat fruit or nuts?', type: 'radio', scored: true, options: FREQ },
+      { code: 'DIET_GRAIN', apiCode: 'Q15_whole_grains', prompt: 'How often do you eat whole grains (whole-grain bread, brown rice, oats, whole-grain pasta)?', type: 'radio', scored: true, options: FREQ },
+      { code: 'DIET_FISH', apiCode: 'Q16_fish', prompt: 'How often do you eat fish or seafood?', type: 'radio', scored: true, options: FREQ },
+      { code: 'DIET_MEAT', apiCode: 'Q17_red_meat', prompt: 'How often do you eat red or processed meat (beef, pork, sausages, ham, salami)?', type: 'radio', scored: true, options: FREQ },
     ],
   },
   {
     title: 'Alcohol',
     whyWeAsk: 'Current evidence finds no safe level — so we treat any reduction as helpful.',
     questions: [
-      { code: 'ALC', apiCode: 'Q18_alcohol', prompt: 'Which best describes your drinking?', type: 'radio', scored: false, options: [
+      { code: 'ALC', apiCode: 'Q18_alcohol', prompt: 'Which best describes your drinking? (One drink ≈ a small beer, a glass of wine, or a shot of spirits.)', type: 'radio', scored: true, options: [
         { value: 'none', label: "I don't drink" },
         { value: 'light', label: 'Light (up to ~1 drink/day)' },
         { value: 'moderate', label: 'Moderate (~1–2/day)' },
@@ -166,19 +175,36 @@ export const SECTIONS: Section[] = [
     title: 'Stress & mood',
     whyWeAsk: 'How you have been feeling lately affects wellbeing and, for stress, longevity.',
     questions: [
-      { code: 'STRESS', apiCode: 'Q19_stress', prompt: 'In the last month, how often have you felt unable to control the important things in your life?', type: 'radio', scored: false, options: [
-        { value: '0', label: 'Never' },
-        { value: '1', label: 'Almost never' },
-        { value: '2', label: 'Sometimes' },
-        { value: '3', label: 'Fairly often' },
-        { value: '4', label: 'Very often' },
-      ] },
-      { code: 'MOOD', apiCode: 'Q20_mood', prompt: 'Over the last 2 weeks, how often have you had little interest or pleasure in doing things?', type: 'radio', scored: false, options: [
-        { value: '0', label: 'Not at all' },
-        { value: '1', label: 'Several days' },
-        { value: '2', label: 'More than half the days' },
-        { value: '3', label: 'Nearly every day' },
-      ] },
+      // PSS-4 (Cohen 1983): items b and c are reverse-scored; STRESS = z(sum 0-16).
+      { code: 'STRESS', apiCode: 'Q19_stress', type: 'battery', scored: true,
+        prompt: 'Perceived stress — in the last month, how often have you…',
+        items: [
+          '…felt unable to control the important things in your life?',
+          '…felt confident about your ability to handle your problems?',
+          '…felt that things were going your way?',
+          '…felt difficulties were piling up so high you could not overcome them?',
+        ],
+        options: [
+          { value: '0', label: 'Never' },
+          { value: '1', label: 'Almost never' },
+          { value: '2', label: 'Sometimes' },
+          { value: '3', label: 'Fairly often' },
+          { value: '4', label: 'Very often' },
+        ] },
+      // PHQ-2 (public domain): a wellbeing/manage signal, deliberately NOT in the risk score
+      // (EXP-12 artifact) — a score >= 3 shows the support note instead.
+      { code: 'MOOD', apiCode: 'Q20_mood', type: 'battery', scored: false,
+        prompt: 'Mood — over the last 2 weeks, how often have you been bothered by…',
+        items: [
+          '…little interest or pleasure in doing things?',
+          '…feeling down, depressed, or hopeless?',
+        ],
+        options: [
+          { value: '0', label: 'Not at all' },
+          { value: '1', label: 'Several days' },
+          { value: '2', label: 'More than half the days' },
+          { value: '3', label: 'Nearly every day' },
+        ] },
     ],
   },
   {
@@ -204,6 +230,7 @@ export const SECTIONS: Section[] = [
     whyWeAsk: 'Air quality and green surroundings are linked with longevity, and this powers the "Where Should I Live?" comparison.',
     confidence: 'medium',
     questions: [
+      { code: 'LOCATION', apiCode: 'Q23_location', prompt: 'Where do you live?', type: 'location', scored: true },
       { code: 'AREA', apiCode: 'Q24_area_type', prompt: 'What kind of area do you live in?', type: 'radio', scored: false, options: [
         { value: 'city', label: 'City' },
         { value: 'suburb', label: 'Suburb / town' },
@@ -216,10 +243,51 @@ export const SECTIONS: Section[] = [
 /** Every question flattened, in order. */
 export const ALL_QUESTIONS: Question[] = SECTIONS.flatMap((s) => s.questions)
 
+// ── Aggregation formulas (LEV-04) ─────────────────────────────────────────────
+
+const FREQ_RANK: Record<string, number> = { never: 0, weekly: 1, few: 2, most: 3, daily: 4 }
+
+/**
+ * Mediterranean-style diet score 0–5 (RES-03): +1 each for vegetables, fruit/nuts, whole grains and
+ * fish at/above their healthy threshold, +1 for red/processed meat BELOW its threshold.
+ * DECLARED ASSUMPTION (the doc's "finalize the thresholds" note): vegetables & fruit count from
+ * 5–6×/week, grains & fish from 2–4×/week, meat counts when at most ~1×/week.
+ */
+export function dietScore(a: Answers): number | undefined {
+  const rank = (code: string) => {
+    const v = a[code]
+    return typeof v === 'string' ? FREQ_RANK[v] : undefined
+  }
+  const [veg, fruit, grain, fish, meat] =
+    ['DIET_VEG', 'DIET_FRUIT', 'DIET_GRAIN', 'DIET_FISH', 'DIET_MEAT'].map(rank)
+  if ([veg, fruit, grain, fish, meat].some((r) => r === undefined)) return undefined
+  return (
+    (veg! >= 3 ? 1 : 0) + (fruit! >= 3 ? 1 : 0) + (grain! >= 2 ? 1 : 0) +
+    (fish! >= 2 ? 1 : 0) + (meat! <= 1 ? 1 : 0)
+  )
+}
+
+/** PSS-4 sum 0–16 (Cohen 1983): items b and c are reverse-scored (4 − value). */
+export function stressScore(a: Answers): number | undefined {
+  const items = a.STRESS
+  if (!Array.isArray(items) || items.length !== 4 || items.some((v) => typeof v !== 'number')) return undefined
+  const [ia, ib, ic, id] = items as number[]
+  return ia + (4 - ib) + (4 - ic) + id
+}
+
+/** PHQ-2 sum 0–6 — a wellbeing signal only, never in the risk score (EXP-12). ≥3 → support note. */
+export function moodScore(a: Answers): number | undefined {
+  const items = a.MOOD
+  if (!Array.isArray(items) || items.length !== 2 || items.some((v) => typeof v !== 'number')) return undefined
+  return (items as number[])[0] + (items as number[])[1]
+}
+
 // ── Answer → Profile mapping ──────────────────────────────────────────────────
 const INCOME_MID: Record<string, number> = { lower: 1.0, 'lower-middle': 1.8, middle: 2.5, 'upper-middle': 3.5, higher: 5.0 }
 const ACT_MIN_MID: Record<string, number> = { u15: 10, '15-29': 22, '30-44': 37, '45-59': 52, '60+': 70 }
 const SLEEP_HOURS: Record<string, number> = { u5: 4.5, '5-6': 5.5, '7-8': 7.5, '9': 9, '10+': 10.5 }
+const SITTING_MID: Record<string, number> = { u4: 3, '4-6': 5, '6-8': 7, '8-10': 9, '10+': 11 }
+const ALC_LEVELS = ['none', 'light', 'moderate', 'heavy'] as const
 
 export const DEFAULT_ANSWERS: Answers = {
   AGE: 45,
@@ -229,12 +297,10 @@ export const DEFAULT_ANSWERS: Answers = {
   SMK: 'never',
   ACT_DAYS: '3',
   ACT_MIN: '30-44',
-  SEDENTARY: '6-8',
   SLEEP: '7-8',
   WAIST: 88,
   HEIGHT: 170,
   WEIGHT: 75,
-  ALC: 'light',
   AREA: 'city',
   COND: [],
   HIST: [],
@@ -276,8 +342,20 @@ export function buildProfile(a: Answers): ProfileDraft {
   const perDay = ACT_MIN_MID[String(a.ACT_MIN)] ?? 30
   const pa_min = 4.0 * perDay * days
 
-  const cond = Array.isArray(a.COND) ? a.COND : []
-  const hist = Array.isArray(a.HIST) ? a.HIST : []
+  const cond = Array.isArray(a.COND) ? (a.COND as string[]) : []
+  const hist = Array.isArray(a.HIST) ? (a.HIST as string[]) : []
+
+  // Literature levers: only mapped when actually answered — an omitted field means "assume the
+  // average person" server-side and contributes 0 (never a guess promoted to a fact).
+  const diet_score = dietScore(a)
+  const alcohol = typeof a.ALC === 'string' && (ALC_LEVELS as readonly string[]).includes(a.ALC)
+    ? (a.ALC as Profile['alcohol'])
+    : undefined
+  const sitting_hours = typeof a.SEDENTARY === 'string' ? SITTING_MID[a.SEDENTARY] : undefined
+  const stress_score = stressScore(a)
+  // The Q22 checkbox is binary; the service scores the fitted any-difficulty encoding either way.
+  const mobility = hist.includes('mobility') ? (1 as const) : undefined
+  const loc = a.LOCATION as LocationAnswer | undefined
 
   const profile: Profile = {
     country: 'RO',
@@ -297,6 +375,13 @@ export function buildProfile(a: Answers): ProfileDraft {
     cancer_hx: hist.includes('cancer'),
     higher_educ: a.EDU === 'university',
     income: INCOME_MID[String(a.INCOME)] ?? 2.5,
+    ...(diet_score !== undefined ? { diet_score } : {}),
+    ...(alcohol !== undefined ? { alcohol } : {}),
+    ...(sitting_hours !== undefined ? { sitting_hours } : {}),
+    ...(stress_score !== undefined ? { stress_score } : {}),
+    ...(mobility !== undefined ? { mobility } : {}),
+    ...(loc?.pm25 !== undefined ? { pm25: loc.pm25 } : {}),
+    ...(loc?.ndvi !== undefined ? { ndvi: loc.ndvi } : {}),
   }
   return { profile, errors }
 }
@@ -306,10 +391,12 @@ export function isVisible(q: Question, a: Answers): boolean {
   return !q.showWhen || q.showWhen(a)
 }
 
-/** Answered means a real value: not blank, and for checkbox groups at least one box ticked. */
+/** Answered means a real value: not blank; checkbox groups need ≥1 tick; batteries every item. */
 function isAnswered(v: Answers[string]): boolean {
   if (v === undefined || v === '') return false
-  return !(Array.isArray(v) && v.length === 0)
+  if (Array.isArray(v)) return v.length > 0 && v.every((x) => x !== undefined)
+  if (typeof v === 'object') return (v as LocationAnswer).name !== undefined
+  return true
 }
 
 /**

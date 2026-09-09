@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { InterviewPage } from './InterviewPage'
@@ -49,5 +49,34 @@ describe('<InterviewPage/>', () => {
     expect(screen.queryByText(/in what year did you quit/i)).not.toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: "I used to, but I've quit" }))
     expect(await screen.findByText(/in what year did you quit/i)).toBeInTheDocument()
+  })
+})
+
+describe('LEV-04 additions', () => {
+  it('renders the PSS-4 and PHQ-2 batteries in full', () => {
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+    expect(screen.getByText(/felt unable to control the important things/i)).toBeInTheDocument()
+    expect(screen.getByText(/confident about your ability to handle your problems/i)).toBeInTheDocument()
+    expect(screen.getByText(/things were going your way/i)).toBeInTheDocument()
+    expect(screen.getByText(/piling up so high/i)).toBeInTheDocument()
+    expect(screen.getByText(/little interest or pleasure/i)).toBeInTheDocument()
+    expect(screen.getByText(/down, depressed, or hopeless/i)).toBeInTheDocument()
+  })
+
+  it('shows the support note when the PHQ-2 screener reads high', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+    expect(screen.queryByText(/feeling low lately/i)).not.toBeInTheDocument()
+    // Answer both mood items "More than half the days" (2 + 2 = 4 >= 3).
+    const mood = screen.getByText(/little interest or pleasure/i).parentElement!
+    await user.click(within(mood).getByRole('radio', { name: 'More than half the days' }))
+    const mood2 = screen.getByText(/down, depressed, or hopeless/i).parentElement!
+    await user.click(within(mood2).getByRole('radio', { name: 'More than half the days' }))
+    expect(await screen.findByText(/feeling low lately/i)).toBeInTheDocument()
+  })
+
+  it('offers the location picker from /api/locations', async () => {
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+    expect(await screen.findByLabelText(/where do you live/i)).toBeInTheDocument()
   })
 })

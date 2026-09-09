@@ -39,6 +39,8 @@ export interface ApiClient {
   getWhy(profile: Profile): Promise<Attribution[]>
   getRecommendations(profile: Profile): Promise<Recommendation[]>
   listLocations(): Promise<Location[]>
+  /** Persist the caller's home location (auth) — powers the ENV term and "Where Should I Live?". */
+  setHomeLocation(name: string, country: string): Promise<void>
   relocate(profile: Profile, candidateId: string): Promise<RelocateResult>
   getStats(): Promise<CohortStat[]>
 }

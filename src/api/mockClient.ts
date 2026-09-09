@@ -101,6 +101,8 @@ export function createMockClient(): ApiClient {
       return [...answers.values()]
     },
 
+    async setHomeLocation(_name: string, _country: string): Promise<void> {},
+
     async saveAnswers(input: AnswerInput[]): Promise<{ saved: number }> {
       for (const a of input) {
         answers.set(a.question_code, {
