@@ -67,8 +67,10 @@ describe('<WhatIfPage/>', () => {
     const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
     // Seeding from the raw field showed "0" while the thumb sat at the slider's floor, and then
     // called dragging up to 5 "cutting down".
-    expect(dose).toHaveValue('12')
-    expect(screen.getByText(/12 \(assumed\)/)).toBeInTheDocument()
+    // 13, not 12: ceil keeps the seed at or above the effective dose (12.18), so returning the
+    // slider to where it started can never be priced as a reduction.
+    expect(dose).toHaveValue('13')
+    expect(screen.getByText(/13 \(assumed\)/)).toBeInTheDocument()
   })
 
   it('never offers a zero dose, which the model reads as unanswered rather than as quitting', () => {
@@ -130,6 +132,9 @@ describe('<WhatIfPage/>', () => {
     await user.click(screen.getByRole('button', { name: /see the effect/i }))
 
     expect(await screen.findByText(/\+\d+\.\d+ yr/)).toBeInTheDocument()
-    expect(await screen.findByText(/Quitting is worth more/i)).toBeInTheDocument()
+    // The note the service returns, verbatim — including the two DOIs, because a claim the user
+    // can read on screen is a claim they can go and check.
+    expect(await screen.findByText(/Quitting is worth much more/i)).toBeInTheDocument()
+    expect(screen.getByText(/doi\.org\/10\.1093\/aje\/kwf150/)).toBeInTheDocument()
   })
 })

@@ -6,9 +6,9 @@
 // structure means the mock produces sensible, monotonic What-If deltas and honest "Why?" attributions.
 
 import type { Attribution, EvidenceGrade, FactorRole, Profile, WhatIfChanges } from './types'
-import { effectiveCigsDay, SMOKER_MEAN_CIGS } from './modelRules'
+import { effectiveCigsDay, REDUCTION_NOTE, SMOKER_MEAN_CIGS } from './modelRules'
 
-export { effectiveCigsDay, SMOKER_MEAN_CIGS }
+export { effectiveCigsDay, REDUCTION_NOTE, SMOKER_MEAN_CIGS }
 
 const round1 = (x: number) => Math.round(x * 10) / 10
 
@@ -247,13 +247,12 @@ export function scoreWhatIf(base: Profile, changes: WhatIfChanges): WhatIfResult
     modified.cigs_day = changes.cigs_day
     // Same honesty the service applies: the per-cigarette gradient is the optimistic reading of
     // cutting down, and must never present itself as equivalent to stopping.
-    // Against the EFFECTIVE dose and only from a smoking base, matching the service: an undeclared
-    // smoker is scored at the cohort mean, and a former smoker's dose field is never scored at all.
+    // Against the EFFECTIVE dose, matching the service: an undeclared smoker is scored at the
+    // cohort mean, and a former smoker's effective dose is 0, so a former smoker resuming can never
+    // come in under it. One comparison fixes both — an explicit base.smoke check was decoration.
     const baseDose = effectiveCigsDay(base)
-    if (modified.smoke === 2 && base.smoke === 2 && changes.cigs_day < baseDose) {
-      note = 'cutting down is priced at the model\'s per-cigarette gradient, which is the ' +
-             'optimistic reading — trials of reduction without quitting show less benefit than ' +
-             'the gradient implies. Quitting is worth more.'
+    if (modified.smoke === 2 && changes.cigs_day < baseDose) {
+      note = REDUCTION_NOTE
     }
   }
   // Quitting zeroes the dose, matching how the score treats a non-smoker's cigarettes.

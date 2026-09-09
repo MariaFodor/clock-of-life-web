@@ -9,6 +9,23 @@ import {
 import type { Profile } from './types'
 
 describe('mock scoring', () => {
+  // The mock has to refuse exactly what the service refuses, or the dev harness disagrees with
+  // production about which scenarios exist at all — which is how a Sleep slider survived for as
+  // long as it did. Both bounds went untested through two review rounds.
+  it('refuses the doses the service refuses, and accepts the ones it accepts', () => {
+    const smoker: Profile = {
+      country: 'RO', age: 55, sex: 'M', smoke: 2, cigs_day: 20, pa_min: 300, sleep: 7,
+      waist: 100, bmi: 27,
+    }
+    // Zero from a current smoker is quitting, and the model reads it as "unanswered" instead.
+    expect(() => scoreWhatIf(smoker, { cigs_day: 0 })).toThrow(/quitting/i)
+    // 80 matches Profile::validate and the service's lever; 81 does not.
+    expect(() => scoreWhatIf(smoker, { cigs_day: 80 })).not.toThrow()
+    expect(() => scoreWhatIf(smoker, { cigs_day: 81 })).toThrow(/between 0 and 80/)
+    // A never-smoker's zero is not a refusal — nothing to quit.
+    expect(() => scoreWhatIf({ ...smoker, smoke: 0, cigs_day: 0 }, { cigs_day: 0 })).not.toThrow()
+  })
+
   it('centres relative risk on the reference person (RR ≈ 1)', () => {
     expect(relativeRisk(REFERENCE_PROFILE)).toBeCloseTo(1, 5)
   })

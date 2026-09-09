@@ -1,7 +1,11 @@
-// Facts about the shipped model that the UI has to know, kept out of the mock scorer so that
-// importing one of them does not drag the whole dev-mode scoring engine into the production bundle.
+// Facts about the shipped model that both the UI and the mock scorer need: ONE definition each,
+// pinned against the service by mockScoring.parity.test.ts.
 //
-// Everything here is pinned against the service's vendored bundle by mockScoring.parity.test.ts.
+// (An earlier version of this comment claimed the split also kept the dev scoring engine out of the
+// production bundle. Review built the counterfactual and the two bundles were byte-identical —
+// Rollup tree-shakes per declaration, not per module, so importing one pure const from mockScoring
+// never pulled scoreWhatIf with it. The real reason is the one above, and a duplicated rule that
+// had already drifted twice.)
 
 import type { Profile } from './types'
 
@@ -21,3 +25,19 @@ export function effectiveCigsDay(p: Pick<Profile, 'smoke' | 'cigs_day'>): number
   if (p.smoke !== 2) return 0
   return p.cigs_day && p.cigs_day > 0 ? p.cigs_day : SMOKER_MEAN_CIGS
 }
+
+/** Why cutting down is not priced like quitting — the text the service returns, mirrored so the
+ *  mock cannot tell a different story from production. Pinned character-for-character against
+ *  `REDUCTION_NOTE` in the service's scoring.rs by the parity suite.
+ *
+ *  Two claims, two sources, both on the wire because a claim a user can read is a claim they can
+ *  check: concavity of the dose-response (Bjartveit & Tverdal 2005) and the absence of a
+ *  demonstrated all-cause mortality benefit from reducing without quitting (Godtfredsen 2002).
+ *  COHORT evidence, deliberately not "trials" — reduction trials are powered for cessation, not
+ *  mortality, and the mock said "trials" until the parity pin caught it. */
+export const REDUCTION_NOTE =
+  "cutting down is priced at the model's per-cigarette gradient, which is the optimistic reading. " +
+  'Smoking risk is concave — the first few cigarettes a day carry far more than their share ' +
+  '(Bjartveit & Tverdal 2005, https://doi.org/10.1136/tc.2005.011932) — and cohort studies of ' +
+  'smokers who cut down have found little to no reduction in all-cause mortality ' +
+  '(Godtfredsen 2002, https://doi.org/10.1093/aje/kwf150). Quitting is worth much more.'

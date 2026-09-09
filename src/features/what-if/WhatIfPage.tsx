@@ -56,7 +56,10 @@ export function WhatIfPage() {
   // effective doses for exactly this reason; the control has to start from the same number, or it
   // argues with the answer it produces.
   const imputedDose = profile.smoke === 2 && !profile.cigs_day
-  const cigs = changes.cigs_day ?? Math.round(effectiveCigsDay(profile))
+  // ceil, not round: 12.18 rounds DOWN to 12, which sits below the effective dose — so an undeclared
+  // smoker who nudged the slider and put it back where it started got a no-op priced as "cutting
+  // down". Seeding at or above the effective dose removes that, at the cost of nothing.
+  const cigs = changes.cigs_day ?? Math.ceil(effectiveCigsDay(profile))
 
   const run = () => whatif.mutate({ base: profile, changes })
   const reset = () => {

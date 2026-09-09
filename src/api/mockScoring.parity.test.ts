@@ -20,7 +20,7 @@ import {
   RO_PM25_REF,
   relativeRisk,
 } from './mockScoring'
-import { effectiveCigsDay, SMOKER_MEAN_CIGS } from './modelRules'
+import { effectiveCigsDay, REDUCTION_NOTE, SMOKER_MEAN_CIGS } from './modelRules'
 import type { Profile } from './types'
 
 // The bundle version is READ from the service's own default, never restated here. It was pinned to
@@ -149,6 +149,33 @@ describe('mock ↔ bundle parity (literature levers)', () => {
   it('the environment reference points match the service constants', () => {
     expect(RO_PM25_REF).toBe(serviceConst('RO_PM25_REF'))
     expect(RO_NDVI_REF).toBe(serviceConst('RO_NDVI_REF'))
+  })
+
+  // The mock told a DIFFERENT evidence story from the service: it said reduction "trials" show
+  // less benefit, while the service documents on the same branch that the claim is COHORT evidence
+  // and that reduction trials are powered for cessation, not mortality — and it shipped with
+  // neither DOI, against this project's citation rule. Two copies of a sentence about evidence is
+  // one copy too many, so it is pinned character-for-character.
+  it("the reduction note matches the service's, word for word", () => {
+    const src = readFileSync(SCORING_RS, 'utf8')
+    // [\s\S] not . — the literal's line continuations are backslash-NEWLINE, which `.` cannot cross.
+    const m = /const REDUCTION_NOTE: &str =\s*("(?:[^"\\]|\\[\s\S])*")\s*;/.exec(src)
+    if (!m) {
+      throw new Error(
+        `Could not find REDUCTION_NOTE in ${SCORING_RS}. If the service renamed or restructured it, ` +
+          'update this reader — do not drop the pin, the two copies drifted the moment they existed.',
+      )
+    }
+    // Rebuild the Rust literal: `\` at end-of-line eats the newline AND the following indentation.
+    const fromService = m[1]
+      .slice(1, -1)
+      .replace(/\\\n\s*/g, '')
+      .replace(/\\"/g, '"')
+    expect(REDUCTION_NOTE).toBe(fromService)
+    // And the claims it makes carry their sources where a user can see them.
+    expect(REDUCTION_NOTE).toContain('doi.org/10.1136/tc.2005.011932')
+    expect(REDUCTION_NOTE).toContain('doi.org/10.1093/aje/kwf150')
+    expect(REDUCTION_NOTE).not.toContain('trials')
   })
 
   // The mock did not replicate this imputation at all, so mock and service disagreed about what a
