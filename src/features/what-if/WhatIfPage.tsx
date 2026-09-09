@@ -55,20 +55,29 @@ export function WhatIfPage() {
   // congratulated them for "cutting down" when they dragged it up to 5. The service compares
   // effective doses for exactly this reason; the control has to start from the same number, or it
   // argues with the answer it produces.
-  const imputedDose = profile.smoke === 2 && !profile.cigs_day
+  // The SCENARIO's smoking status, not the profile's: a former smoker who switches to Current is
+  // scored at the smokers' mean from that moment, so the row has to say so too. Reading the
+  // profile's status left them looking at a dose of 0 while the model used 12.18.
+  const scenarioSmoke = changes.smoke ?? profile.smoke
+  const imputedDose = scenarioSmoke === 2 && !profile.cigs_day
   // ceil, not round: 12.18 rounds DOWN to 12, which sits below the effective dose, so the seed
   // itself read as a reduction. ceil is not free either — 13 sits above it, and submitting the seed
   // would charge 0.1 years for standing still. That is why `submitted()` below drops the field
   // instead; the rounding only decides which way the phantom would have pointed.
-  const cigs = changes.cigs_day ?? Math.ceil(effectiveCigsDay(profile))
+  const seedDose = Math.ceil(effectiveCigsDay({ smoke: scenarioSmoke, cigs_day: profile.cigs_day }))
+  const cigs = changes.cigs_day ?? seedDose
 
   // Dragging the dose away and back to where it started is not a change, and must not be priced as
   // one. The slider is integer while the imputed dose is 12.18, so NO integer seed round-trips
   // cleanly: 12 came in under it and got a "cutting down" note on a no-op, 13 sits above it and
   // costs a phantom 0.1 years in red. Neither rounding fixes that — dropping the field does. What
   // the user did was nothing, so nothing is what we send.
+  //
+  // Against `seedDose`, NOT against `cigs`: `cigs` IS `changes.cigs_day` the moment the slider is
+  // touched, so comparing to it is a tautology that dropped EVERY dose change and left the lever
+  // inert for exactly the smokers this page added it for.
   const submitted = (): WhatIfChanges =>
-    imputedDose && changes.cigs_day === cigs ? { ...changes, cigs_day: undefined } : changes
+    imputedDose && changes.cigs_day === seedDose ? { ...changes, cigs_day: undefined } : changes
 
   const run = () => whatif.mutate({ base: profile, changes: submitted() })
   const reset = () => {

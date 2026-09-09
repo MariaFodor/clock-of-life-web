@@ -89,6 +89,35 @@ describe('<WhatIfPage/>', () => {
     expect(screen.queryByText(/Quitting is worth much more/i)).not.toBeInTheDocument()
   })
 
+  // The companion to the test above, and the one that was missing: nothing in the suite could tell
+  // "the round-trip is a no-op" apart from "the dose lever does nothing at all", so a guard that
+  // dropped EVERY dose change passed 85 tests while the slider was inert for every undeclared
+  // smoker — the exact people this page added it for.
+  it('still sends a real dose change from an undeclared smoker', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<WhatIfPage />, {
+      profile: { ...SAMPLE_PROFILE, smoke: 2, cigs_day: 0 },
+    })
+    fireEvent.change(screen.getByRole('slider', { name: /cigarettes per day/i }),
+                     { target: { value: '5' } })
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+
+    expect(await screen.findByText(/\+\d+\.\d+ yr/)).toBeInTheDocument()
+    expect(await screen.findByText(/Quitting is worth much more/i)).toBeInTheDocument()
+  })
+
+  it('shows a resuming smoker the dose the model will actually use', () => {
+    // A former smoker who switches to Current is scored at the smokers' mean from that moment.
+    // Seeding off the PROFILE's status showed them a dose of 0 while the model used 12.18.
+    renderWithProviders(<WhatIfPage />, { profile: { ...SAMPLE_PROFILE, smoke: 1, cigs_day: 0 } })
+    expect(screen.queryByRole('slider', { name: /cigarettes per day/i })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Current' }))
+    const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
+    expect(dose).toHaveValue('13')
+    expect(screen.getByText(/13 \(assumed\)/)).toBeInTheDocument()
+  })
+
   it('never offers a zero dose, which the model reads as unanswered rather than as quitting', () => {
     renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
     // min=1: the service refuses a zero dose from a smoker, because scoring it would impute the
