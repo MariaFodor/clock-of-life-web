@@ -42,6 +42,8 @@ export const SAMPLE_ESTIMATE: Estimate = {
 
 interface Options {
   route?: string
+  /** initial router location state (e.g. a notice handed over by another page) */
+  routerState?: unknown
   profile?: Profile | null
   estimate?: Estimate | null
   client?: ApiClient
@@ -58,7 +60,7 @@ export function renderWithProviders(ui: ReactElement, opts: Options = {}) {
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       <MemoryRouter
-        initialEntries={[opts.route ?? '/']}
+        initialEntries={[{ pathname: opts.route ?? '/', state: opts.routerState ?? null }]}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <ThemeProvider>

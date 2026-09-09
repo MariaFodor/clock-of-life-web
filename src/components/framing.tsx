@@ -53,6 +53,20 @@ const GRADE_LABEL: Record<EvidenceGrade, string> = {
   na: 'ungraded',
 }
 
+/**
+ * Shown when the PHQ-2 mood screener reads >= 3. The answer is deliberately NOT in the risk score
+ * (EXP-12); asking about hopelessness and doing nothing with it would be the worst of both worlds.
+ */
+export function MoodSupportNote() {
+  return (
+    <div role="status" aria-live="polite" className="rounded-lg border border-clock-brand/30 bg-clock-brandsoft px-4 py-3 text-sm text-clock-ink">
+      Your answers suggest you may have been feeling low lately. That doesn't change your estimate —
+      but it matters. Talking to someone you trust or a professional can genuinely help, and if you
+      are in crisis, please reach out to a local helpline now.
+    </div>
+  )
+}
+
 /** Evidence grade chip — every attributed factor carries its grade. */
 export function EvidenceChip({ grade }: { grade: EvidenceGrade }) {
   return (

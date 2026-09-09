@@ -60,7 +60,12 @@ const get = <T>(path: string) => request<T>(path)
 // Conservative by construction: an unknown or missing grade is shown as ungraded ('na'),
 // never promoted to a stronger-looking one (REVIEW-2026-09-09 W3).
 const asGrade = (g: string | null | undefined): EvidenceGrade =>
-  (EVIDENCE_GRADES as readonly string[]).includes(g ?? '') ? (g as EvidenceGrade) : 'na'
+  // alcohol's bundle grade is "strong_for_harm" — strong evidence, harm-directional (RES-02).
+  g === 'strong_for_harm'
+    ? 'strong'
+    : (EVIDENCE_GRADES as readonly string[]).includes(g ?? '')
+      ? (g as EvidenceGrade)
+      : 'na'
 
 const asRole = (r: string): FactorRole =>
   r === 'lever' || r === 'manage' || r === 'context' || r === 'baseline' ? r : 'context'
@@ -160,6 +165,10 @@ export function createHttpClient(): ApiClient {
       return post<{ saved: number }>('/answers', { answers })
     },
 
+    async setHomeLocation(name: string, country: string): Promise<void> {
+      await post<unknown>('/profile/location', { name, country })
+    },
+
     async getBenchmark(profile: Profile): Promise<Benchmark> {
       const key = keyOf(profile)
       const userYears = yearsCache.get(key) ?? (await runEstimate(profile)).estimate_years
@@ -205,8 +214,9 @@ export function createHttpClient(): ApiClient {
       return rows.map((l) => ({
         id: l.name,
         name: l.name,
-        pm25: l.pm25 ?? 0,
-        ndvi: l.ndvi ?? 0,
+        // A missing exposure stays unknown — coercing it to 0 would score pristine air (PR#1 N1).
+        pm25: l.pm25 ?? undefined,
+        ndvi: l.ndvi ?? undefined,
         kind: l.area_type === 'rural' ? 'rural' : l.area_type === 'suburb' ? 'suburb' : 'city',
       }))
     },
@@ -222,7 +232,14 @@ export function createHttpClient(): ApiClient {
 
       const current: Location = res.from
         ? { id: res.from.name, name: res.from.name, pm25: res.from.pm25, ndvi: res.from.ndvi, kind: 'city' }
-        : { id: 'current', name: 'your current area', pm25: profile.pm25 ?? 0, ndvi: profile.ndvi ?? 0, kind: 'city' }
+        : {
+            id: 'current',
+            name: 'your current area',
+            // Unknown stays unknown — 0 µg/m³ would read as pristine air (PR#1 N1).
+            pm25: profile.pm25,
+            ndvi: profile.ndvi,
+            kind: 'city',
+          }
       const candidate: Location = { id: res.to.name, name: res.to.name, pm25: res.to.pm25, ndvi: res.to.ndvi, kind: 'city' }
       const air = res.breakdown.air_delta_years
       const green = res.breakdown.greenspace_delta_years

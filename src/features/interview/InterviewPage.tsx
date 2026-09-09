@@ -1,18 +1,110 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useEstimate, useSaveAnswers } from '../../api/hooks'
+import { useEstimate, useLocations, useSaveAnswers } from '../../api/hooks'
+import { getClient } from '../../api/client'
 import { useProfile } from '../../app/profile'
 import { PageHeader, Card, ErrorState } from '../../components/ui'
-import { StatisticalEstimateNote } from '../../components/framing'
+import { MoodSupportNote, StatisticalEstimateNote } from '../../components/framing'
 import {
   SECTIONS,
   DEFAULT_ANSWERS,
   buildProfile,
   answersForApi,
   isVisible,
+  moodScore,
   type Answers,
+  type LocationAnswer,
   type Question,
 } from './questionnaire'
+
+/** One sub-item per row, all sharing the question's response scale; the answer is a number array. */
+function BatteryField({
+  q,
+  value,
+  onChange,
+}: {
+  q: Question
+  value: Answers[string]
+  onChange: (v: Answers[string]) => void
+}) {
+  const arr: (number | undefined)[] = Array.isArray(value)
+    ? (value as number[])
+    : new Array(q.items!.length).fill(undefined)
+  const setItem = (i: number, v: number) => {
+    const next = [...arr]
+    next[i] = v
+    onChange(next as number[])
+  }
+  return (
+    <div className="space-y-3">
+      {q.items!.map((item, i) => (
+        <div key={item}>
+          <div className="mb-1 text-sm text-clock-ink">{item}</div>
+          <div role="radiogroup" aria-label={item} className="flex flex-wrap gap-2">
+            {q.options!.map((o) => {
+              const selected = arr[i] === Number(o.value)
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setItem(i, Number(o.value))}
+                  className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                    selected
+                      ? 'border-clock-brand bg-clock-brandsoft text-clock-brand'
+                      : 'border-clock-line bg-clock-canvas text-clock-ink hover:border-clock-brand/40'
+                  }`}
+                >
+                  {o.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Q23: pick a location from /api/locations; the answer captures its PM2.5/NDVI at selection time. */
+function LocationField({
+  value,
+  onChange,
+}: {
+  value: Answers[string]
+  onChange: (v: Answers[string]) => void
+}) {
+  const { data: locations, isLoading, isError } = useLocations()
+  const current = (value as LocationAnswer | undefined)?.name ?? ''
+  if (isLoading) return <p className="text-sm text-clock-muted">Loading locations…</p>
+  if (isError) {
+    return (
+      <p role="alert" className="text-sm text-clock-bad">
+        We could not load the list of locations, so this question can't be answered right now. Your
+        estimate will be calculated without the air-quality and greenspace term.
+      </p>
+    )
+  }
+  return (
+    <select
+      className="field max-w-[16rem]"
+      aria-label="Where do you live?"
+      value={current}
+      onChange={(e) => {
+        const l = locations?.find((x) => x.name === e.target.value)
+        onChange(l ? { name: l.name, country: 'RO', pm25: l.pm25, ndvi: l.ndvi } : undefined)
+      }}
+    >
+      <option value="">Choose your city / area…</option>
+      {(locations ?? []).map((l) => (
+        <option key={l.id} value={l.name}>
+          {l.name}
+        </option>
+      ))}
+    </select>
+  )
+}
 
 function Field({
   q,
@@ -33,6 +125,12 @@ function Field({
         onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
       />
     )
+  }
+  if (q.type === 'battery') {
+    return <BatteryField q={q} value={value} onChange={onChange} />
+  }
+  if (q.type === 'location') {
+    return <LocationField value={value} onChange={onChange} />
   }
   if (q.type === 'radio') {
     return (
@@ -60,7 +158,7 @@ function Field({
     )
   }
   // checkboxes
-  const arr = Array.isArray(value) ? value : []
+  const arr = (Array.isArray(value) ? value : []) as string[]
   return (
     <div className="flex flex-col gap-2">
       {q.options!.map((o) => {
@@ -123,7 +221,23 @@ export function InterviewPage() {
       )
       return
     }
-    navigate('/')
+    // The home location is a separate, lesser failure: the ENV term already reached this estimate
+    // via the profile's pm25/ndvi, and the stored row only powers "Where Should I Live?" later —
+    // so say what actually failed and let the user through (PR#1 B1).
+    const loc = answers.LOCATION as LocationAnswer | undefined
+    let locationError: string | undefined
+    if (loc?.name) {
+      try {
+        await getClient().setHomeLocation(loc.name, loc.country)
+      } catch (e) {
+        // The message must survive the navigation — this component unmounts immediately, so local
+        // state here would render nothing at all (PR#1 B1, round 2).
+        locationError = `Your answers were saved, but we could not record ${loc.name} as your home location (${
+          e instanceof Error ? e.message : 'unknown error'
+        }). You can set it again later from "Where Should I Live?".`
+      }
+    }
+    navigate('/', locationError ? { state: { notice: locationError } } : undefined)
   }
 
   return (
@@ -167,6 +281,11 @@ export function InterviewPage() {
                   </div>
                 ))}
             </div>
+            {section.questions.some((q) => q.code === 'MOOD') && (moodScore(answers) ?? 0) >= 3 && (
+              <div className="mt-4">
+                <MoodSupportNote />
+              </div>
+            )}
           </Card>
         ))}
       </div>

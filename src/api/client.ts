@@ -30,6 +30,8 @@ export interface ApiClient {
   getMeta(): Promise<Meta>
   estimate(profile: Profile): Promise<Estimate>
   whatif(base: Profile, changes: WhatIfChanges, baseCalculationId?: string): Promise<WhatIf>
+  /** Persist the caller's home location (auth) — powers the ENV term and "Where Should I Live?". */
+  setHomeLocation(name: string, country: string): Promise<void>
   listCalculations(): Promise<CalcRow[]>
   getAnswers(): Promise<AnswerRow[]>
   saveAnswers(answers: AnswerInput[]): Promise<{ saved: number }>

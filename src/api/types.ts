@@ -41,6 +41,17 @@ export interface Profile {
   pm25?: number
   /** home greenspace NDVI, from the user's location; omitted → ENV neutral */
   ndvi?: number
+  // Literature levers (LEV-04): omitted = "assume the average person", contributes 0 to the score.
+  /** Mediterranean-style diet item sum 0–5 (Q13–Q17) */
+  diet_score?: number
+  /** drinking level (Q18) */
+  alcohol?: 'none' | 'light' | 'moderate' | 'heavy'
+  /** daily sitting/screen hours (Q10) */
+  sitting_hours?: number
+  /** perceived-stress PSS-4 sum 0–16 (Q19 a–d) */
+  stress_score?: number
+  /** difficulty walking/climbing stairs: 0 none / 1 some / 2 a lot (Q22) */
+  mobility?: 0 | 1 | 2
 }
 
 /** scoring.rs `Estimate` + the persisted calculation id (lib.rs `EstimateResponse`). */
@@ -59,6 +70,10 @@ export interface WhatIfChanges {
   pa_min?: number
   sleep?: number
   waist?: number
+  diet_score?: number
+  alcohol?: 'none' | 'light' | 'moderate' | 'heavy'
+  sitting_hours?: number
+  stress_score?: number
 }
 
 /** scoring.rs `WhatIf` + optional persisted scenario id. */
@@ -149,10 +164,10 @@ export interface Recommendation {
 export interface Location {
   id: string
   name: string
-  /** annual mean PM2.5 (µg/m³) */
-  pm25: number
-  /** greenspace index (NDVI, 0–1) */
-  ndvi: number
+  /** annual mean PM2.5 (µg/m³); undefined when the layer has no value for this location */
+  pm25?: number
+  /** greenspace index (NDVI, 0–1); undefined when the layer has no value for this location */
+  ndvi?: number
   kind: 'city' | 'suburb' | 'rural'
 }
 
