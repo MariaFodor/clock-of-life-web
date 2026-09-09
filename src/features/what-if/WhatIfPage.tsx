@@ -119,7 +119,7 @@ export function WhatIfPage() {
               // which made cutting to zero worth LESS than cutting to one. Quitting is the smoking
               // button above, and it is the honest way to ask that question.
               min={1}
-              max={60}
+              max={80}
               step={1}
               value={cigs}
               // Say so when the number is ours rather than theirs: this person never told us, and a

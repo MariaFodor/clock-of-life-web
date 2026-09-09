@@ -330,10 +330,11 @@ export function buildProfile(a: Answers): ProfileDraft {
 
   const smoke = a.SMK === 'current' ? 2 : a.SMK === 'former' ? 1 : 0
   // Current-smoker dose only: former/never smoke 0/day now (matches the model's cigs_day encoding).
-  // Clamped to 60, matching the service's What-If bound: at 80 the What-If slider silently pinned
-  // such a person's value to 60 while still displaying 75, and a profile the interview accepts that
-  // What-If would refuse is a contradiction the user has no way to resolve.
-  const cigs_day = smoke === 2 ? Math.min(Math.max(num(a.CIGS) || 0, 0), 60) : 0
+  // 80, matching what the service validates a profile at AND what its What-If lever now accepts.
+  // This briefly clamped to 60 to match the lever, which resolved the contradiction by discarding
+  // what a 75-a-day smoker actually told us — silently, and it changed their estimate. The lever
+  // moved to 80 instead.
+  const cigs_day = smoke === 2 ? Math.min(Math.max(num(a.CIGS) || 0, 0), 80) : 0
 
   // Systolic BP is optional: only sent when the user gives a plausible reading; otherwise the service
   // derives it from the high-blood-pressure answer, so a blank field is never a wasted question.

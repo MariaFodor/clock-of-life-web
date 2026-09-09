@@ -232,8 +232,8 @@ export function scoreWhatIf(base: Profile, changes: WhatIfChanges): WhatIfResult
   }
   if (changes.pa_min !== undefined) modified.pa_min = changes.pa_min
   if (changes.cigs_day !== undefined) {
-    if (changes.cigs_day < 0 || changes.cigs_day > 60) {
-      throw new Error('cigarettes per day must be between 0 and 60')
+    if (changes.cigs_day < 0 || changes.cigs_day > 80) {
+      throw new Error('cigarettes per day must be between 0 and 80')
     }
     // Mirrors the service: a current smoker's zero is "did not answer", not "quit", so it is
     // refused rather than scored at the imputed average. The mock has to refuse what the service

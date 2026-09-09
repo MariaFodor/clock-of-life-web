@@ -78,6 +78,16 @@ describe('<WhatIfPage/>', () => {
     expect(screen.getByRole('slider', { name: /cigarettes per day/i })).toHaveAttribute('min', '1')
   })
 
+  it('lets a very heavy smoker ask about cutting down', () => {
+    // The lever bound and the profile bound disagreed at 60 vs 80, so a 75-a-day smoker had an
+    // estimable profile and every lever except this one. Clamping the interview to 60 "fixed" that
+    // by discarding what they told us; the lever moved to 80 instead.
+    renderWithProviders(<WhatIfPage />, { profile: { ...SAMPLE_PROFILE, cigs_day: 75 } })
+    const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
+    expect(dose).toHaveAttribute('max', '80')
+    expect(dose).toHaveValue('75')
+  })
+
   it('shows a declared dose as declared, with no assumption note', () => {
     renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
     expect(screen.getByRole('slider', { name: /cigarettes per day/i })).toHaveValue('15')
