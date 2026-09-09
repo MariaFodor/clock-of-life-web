@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useProfile } from '../../app/profile'
 import { useWhatIf } from '../../api/hooks'
+import { effectiveCigsDay } from '../../api/modelRules'
 import type { SmokeStatus, WhatIf, WhatIfChanges } from '../../api/types'
 import { PageHeader, Card, NeedsProfile, ErrorState } from '../../components/ui'
 import { StatisticalEstimateNote } from '../../components/framing'
@@ -48,7 +49,14 @@ export function WhatIfPage() {
   const smoke = changes.smoke ?? profile.smoke
   const pa = changes.pa_min ?? profile.pa_min
   const waist = changes.waist ?? profile.waist
-  const cigs = changes.cigs_day ?? profile.cigs_day ?? 0
+  // Seeded from the EFFECTIVE dose, not the raw field. A current smoker who never answered the dose
+  // question stores 0, and the model scores them at the cohort's smoker mean — so seeding from the
+  // field left the row reading "0" while the slider's floor pinned the thumb to 1, and then
+  // congratulated them for "cutting down" when they dragged it up to 5. The service compares
+  // effective doses for exactly this reason; the control has to start from the same number, or it
+  // argues with the answer it produces.
+  const imputedDose = profile.smoke === 2 && !profile.cigs_day
+  const cigs = changes.cigs_day ?? Math.round(effectiveCigsDay(profile))
 
   const run = () => whatif.mutate({ base: profile, changes })
   const reset = () => {
@@ -114,7 +122,11 @@ export function WhatIfPage() {
               max={60}
               step={1}
               value={cigs}
-              display={`${cigs.toFixed(0)}`}
+              // Say so when the number is ours rather than theirs: this person never told us, and a
+              // bare "12" would read back as something they had reported.
+              display={imputedDose && changes.cigs_day === undefined
+                ? `${cigs.toFixed(0)} (assumed)`
+                : `${cigs.toFixed(0)}`}
               onChange={(v) => setChanges((c) => ({ ...c, cigs_day: v }))}
             />
           )}

@@ -6,6 +6,9 @@
 // structure means the mock produces sensible, monotonic What-If deltas and honest "Why?" attributions.
 
 import type { Attribution, EvidenceGrade, FactorRole, Profile, WhatIfChanges } from './types'
+import { effectiveCigsDay, SMOKER_MEAN_CIGS } from './modelRules'
+
+export { effectiveCigsDay, SMOKER_MEAN_CIGS }
 
 const round1 = (x: number) => Math.round(x * 10) / 10
 
@@ -66,18 +69,6 @@ export const LITERATURE_BETA: Readonly<Record<string, number>> = Object.freeze({
   sedentary: 0.08,
   stress: 0.05,
 })
-
-/** The bundle's `conditional_defaults.cigs_day_when_current_smoker` (model-v3.0.1). A CURRENT smoker
- *  who never answered the dose question is scored at the cohort's smoker mean, not at zero — since
- *  the smoking contrast was corrected, `smk_current` no longer carries the dose, so zero would
- *  describe a smoker who smokes nothing. The parity suite pins this against the shipped bundle. */
-export const SMOKER_MEAN_CIGS = 12.180940083564199
-
-/** The dose the score actually uses, imputation included (scoring.rs `effective_cigs_day`). */
-export function effectiveCigsDay(p: Pick<Profile, 'smoke' | 'cigs_day'>): number {
-  if (p.smoke !== 2) return 0
-  return p.cigs_day && p.cigs_day > 0 ? p.cigs_day : SMOKER_MEAN_CIGS
-}
 
 /** Log-hazard coefficients (illustrative for the fitted terms). Positive = shortens life. */
 const BETA: Record<string, number> = {
@@ -258,7 +249,7 @@ export function scoreWhatIf(base: Profile, changes: WhatIfChanges): WhatIfResult
     // cutting down, and must never present itself as equivalent to stopping.
     // Against the EFFECTIVE dose and only from a smoking base, matching the service: an undeclared
     // smoker is scored at the cohort mean, and a former smoker's dose field is never scored at all.
-    const baseDose = base.smoke === 2 ? (base.cigs_day || SMOKER_MEAN_CIGS) : 0
+    const baseDose = effectiveCigsDay(base)
     if (modified.smoke === 2 && base.smoke === 2 && changes.cigs_day < baseDose) {
       note = 'cutting down is priced at the model\'s per-cigarette gradient, which is the ' +
              'optimistic reading — trials of reduction without quitting show less benefit than ' +

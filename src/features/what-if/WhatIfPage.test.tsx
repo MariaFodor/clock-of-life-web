@@ -58,6 +58,39 @@ describe('<WhatIfPage/>', () => {
     expect(screen.getByText(/marker of illness rather than a cause/i)).toBeInTheDocument()
   })
 
+  // Every assertion here covers a fix that shipped untested and that a revert passed all 76 tests.
+  it('starts the dose where the model scores it, not where the field is', () => {
+    // A current smoker who never answered the dose question: stored 0, scored at the cohort mean.
+    renderWithProviders(<WhatIfPage />, {
+      profile: { ...SAMPLE_PROFILE, smoke: 2, cigs_day: 0 },
+    })
+    const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
+    // Seeding from the raw field showed "0" while the thumb sat at the slider's floor, and then
+    // called dragging up to 5 "cutting down".
+    expect(dose).toHaveValue('12')
+    expect(screen.getByText(/12 \(assumed\)/)).toBeInTheDocument()
+  })
+
+  it('never offers a zero dose, which the model reads as unanswered rather than as quitting', () => {
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+    // min=1: the service refuses a zero dose from a smoker, because scoring it would impute the
+    // cohort mean and make cutting to zero worth LESS than cutting to one.
+    expect(screen.getByRole('slider', { name: /cigarettes per day/i })).toHaveAttribute('min', '1')
+  })
+
+  it('shows a declared dose as declared, with no assumption note', () => {
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+    expect(screen.getByRole('slider', { name: /cigarettes per day/i })).toHaveValue('15')
+    expect(screen.queryByText(/assumed/)).not.toBeInTheDocument()
+  })
+
+  it('groups the sleep marker so its reason is announced with its value', () => {
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+    const group = screen.getByRole('group', { name: /sleep/i })
+    expect(group).toHaveTextContent('7.5 h')
+    expect(group).toHaveTextContent(/marker of illness/i)
+  })
+
   it('hides the dose for a non-smoker, who has none to change', () => {
     renderWithProviders(<WhatIfPage />, { profile: { ...SAMPLE_PROFILE, smoke: 0 } })
     expect(screen.queryByRole('slider', { name: /cigarettes per day/i })).not.toBeInTheDocument()

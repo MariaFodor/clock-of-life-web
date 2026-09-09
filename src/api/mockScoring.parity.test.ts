@@ -15,13 +15,12 @@ import {
   ALCOHOL_LEVELS,
   ALCOHOL_REFERENCE_LEVEL,
   effectiveBeta,
-  effectiveCigsDay,
   effectiveStandardizer,
   RO_NDVI_REF,
   RO_PM25_REF,
   relativeRisk,
-  SMOKER_MEAN_CIGS,
 } from './mockScoring'
+import { effectiveCigsDay, SMOKER_MEAN_CIGS } from './modelRules'
 import type { Profile } from './types'
 
 // The bundle version is READ from the service's own default, never restated here. It was pinned to
@@ -49,16 +48,25 @@ function serviceDefaultBundle(): string {
         'checkout (its vendored bundle is the source of truth for the literature coefficients).',
     )
   }
-  const m = /unwrap_or_else\(\|_\|\s*"bundle\/([^"]+)"\.to_string\(\)\)/.exec(
-    readFileSync(mainRs, 'utf8'),
-  )
-  if (!m) {
+  // matchAll, not exec: exec silently takes the first hit, so if the service ever grows a second
+  // bundle-selection site this would quietly pin the wrong one — the same class of silent staleness
+  // that made the literal go bad.
+  const found = [
+    ...readFileSync(mainRs, 'utf8').matchAll(
+      /unwrap_or_else\(\|_\|\s*"bundle\/([^"]+)"\.to_string\(\)\)/g,
+    ),
+  ]
+  if (found.length !== 1) {
     throw new Error(
-      `Could not read the default bundle version out of ${mainRs}. If the service changed how it ` +
-        'selects a bundle, update this reader — do not re-pin a literal here, that is what went stale.',
+      found.length === 0
+        ? `Could not read the default bundle version out of ${mainRs}. If the service changed how ` +
+          'it selects a bundle, update this reader — do not re-pin a literal here, that is what ' +
+          'went stale.'
+        : `${mainRs} names ${found.length} default bundles (${found.map((f) => f[1]).join(', ')}); ` +
+          'this reader cannot tell which one the service uses. Make the service unambiguous.',
     )
   }
-  return m[1]
+  return found[0][1]
 }
 
 const BUNDLE_VERSION = serviceDefaultBundle()
