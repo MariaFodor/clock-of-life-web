@@ -155,6 +155,34 @@ describe('<CausalGraph/>', () => {
     })
   })
 
+  // Why? mounts the graph when the reader opens the disclosure below the bars, and hands it the
+  // factor costing them most. Arriving on one factor's paths is the whole point: the resting state
+  // draws every declared edge at once, which is what made the graph unreadable on arrival.
+  describe('opened on a factor', () => {
+    it('lights that factor s paths and dims the rest, and says which factor it is', () => {
+      const { container } = render(<CausalGraph ontology={ONTOLOGY} initialFocus="waist" />)
+
+      const lit = [...container.querySelectorAll('path[marker-end]')]
+        .filter((p) => p.getAttribute('class')?.includes('stroke-clock-brand'))
+      expect(lit).toHaveLength(4) // the same 4 of 5 that hovering waist lights
+      expect(container.querySelector('[role="status"]')).toHaveTextContent('Acts through: Diabetes, Hypertension')
+      // Focused, not merely lit: the node itself has to read as the one being asked about.
+      expect(screen.getByLabelText('Waist: lever').querySelector('rect')?.getAttribute('class'))
+        .toContain('fill-clock-brandsoft')
+    })
+
+    it('stays on the resting state when handed a factor it does not draw', () => {
+      // The ontology is a slice of the model, so a breakdown row can name a factor with no node.
+      // Focusing one would dim every node and show no detail card — a blank grey picture. Declining
+      // is the documented behaviour; without this, deleting the guard breaks nothing visible here.
+      const { container } = render(<CausalGraph ontology={ONTOLOGY} initialFocus="cigs_day" />)
+      const dimmed = [...container.querySelectorAll('g[opacity]')]
+        .filter((g) => Number(g.getAttribute('opacity')) < 1)
+      expect(dimmed).toEqual([])
+      expect(container.querySelector('[role="status"]')).toBeEmptyDOMElement()
+    })
+  })
+
   it('mounts the live region empty, so a screen reader announces what lands in it', () => {
     const { container } = render(<CausalGraph ontology={ONTOLOGY} />)
     const status = container.querySelector('[role="status"]')
