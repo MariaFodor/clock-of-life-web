@@ -4,8 +4,14 @@
     {
       "name": "clock-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 5173
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5181,
+      "env": {
+        "VITE_API_TARGET": "http://127.0.0.1:8099"
+      }
     }
   ]
 }

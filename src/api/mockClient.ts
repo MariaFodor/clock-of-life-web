@@ -6,7 +6,7 @@
 
 import atlasFixture from '../features/atlas/atlas.fixture.json'
 
-import type { AtlasData } from './types'
+import type { AtlasData, AtlasEnvironment } from './types'
 
 import type { ApiClient } from './client'
 import type {
@@ -282,6 +282,15 @@ export function createMockClient(): ApiClient {
       // a fixture invented in this repo is a second source of truth that drifts silently, which is
       // the whole failure this surface was redesigned to avoid.
       return atlasFixture as AtlasData
+    },
+
+    async getEnvironment(): Promise<AtlasEnvironment> {
+      // Dynamically imported, unlike the atlas fixture: 3,521 points are several hundred KB, and a
+      // static import would put them in the main chunk for every reader, including the ones who never
+      // open the World tab. Generated from the service verbatim — not sampled — because the page states
+      // coverage numbers and a thinned fixture would make every one of them wrong in the mock.
+      const mod = await import('../features/atlas/environment.fixture.json')
+      return (mod.default ?? mod) as unknown as AtlasEnvironment
     },
 
     async getStats(): Promise<CohortStat[]> {

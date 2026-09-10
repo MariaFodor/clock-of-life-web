@@ -13,7 +13,8 @@ import { useMemo, useState } from 'react'
 import { useProfile } from '../../app/profile'
 import { Card, ErrorState, Loading, PageHeader } from '../../components/ui'
 import { StatisticalEstimateNote } from '../../components/framing'
-import { MapLegend, MapReadout, MortalityMap } from './MortalityMap'
+import { AirLayer, AirLegend } from './AirLayer'
+import { MapLegend, MapReadout, MortalityMap, PlaceReadout } from './MortalityMap'
 import { CountryCard } from './CountryCard'
 import { CountryTable } from './CountryTable'
 import {
@@ -31,10 +32,10 @@ import {
 } from './measures'
 import type { MeasureId } from './measures'
 import { buildScale } from './scale'
-import { useAtlas } from '../../api/hooks'
+import { useAtlas, useAtlasEnvironment } from '../../api/hooks'
 import { useAtlasGeometry } from './atlasData'
 import type { ViewKey } from './types'
-import type { AtlasCountry, SexKey } from '../../api/types'
+import type { AtlasCountry, EnvPoint, SexKey } from '../../api/types'
 
 const VIEWS: { id: ViewKey; label: string }[] = [
   { id: 'world', label: 'The globe' },
@@ -143,9 +144,14 @@ export function AtlasPage() {
   const [sex, setSex] = useState<SexKey>(profile?.sex === 'M' ? 'm' : profile?.sex === 'F' ? 'f' : 'b')
   const [picked, setPicked] = useState<string | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
+  // Off by default. The air layer is 3,521 points and several hundred KB; a reader who came to look at
+  // life expectancy should not pay for it, and the query is not issued until this is true.
+  const [air, setAir] = useState(false)
+  const [hoveredPlace, setHoveredPlace] = useState<EnvPoint | null>(null)
 
   const atlas = useAtlas()
   const geo = useAtlasGeometry(view)
+  const environment = useAtlasEnvironment(air)
 
   const measure = measureById(measureId)
   // The women-minus-men gap has no single sex. Rather than letting the selector sit there lying
@@ -180,6 +186,20 @@ export function AtlasPage() {
                   : [...values.values()]
   }, [geo.data, values])
   const scale = useMemo(() => buildScale(drawnValues, measure), [drawnValues, measure])
+
+  // The countries THIS view draws that have no air measurement. Intersected with the shapes on screen
+  // rather than taken whole: the world view draws 176 of the 237, so the unhatched remainder — and the
+  // count the legend prints — is a different number in each view.
+  const unmeasured = useMemo(() => {
+    if (!air || !environment.data || !geo.data) return undefined
+    const shapes = new Set(Object.keys(geo.data.countries))
+    return new Set(environment.data.unmeasured_iso3.filter((iso3) => shapes.has(iso3)))
+  }, [air, environment.data, geo.data])
+
+  const drawnCountries = useMemo(
+    () => new Set(geo.data ? Object.keys(geo.data.countries) : []),
+    [geo.data],
+  )
 
   const readoutIso = hovered ?? selected
   const readoutCountry = countryByKey(countries, readoutIso)
@@ -246,7 +266,18 @@ export function AtlasPage() {
                 </select>
               </div>
             </div>
-            <p className="mt-4 text-xs leading-relaxed text-clock-muted">{measure.note}</p>
+            <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+              <p className="max-w-3xl text-xs leading-relaxed text-clock-muted">{measure.note}</p>
+              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-clock-ink">
+                <input
+                  type="checkbox"
+                  checked={air}
+                  onChange={(e) => setAir(e.target.checked)}
+                  data-testid="air-toggle"
+                />
+                Show where the air is measured
+              </label>
+            </div>
           </Card>
 
           <Card className="mt-4">
@@ -262,6 +293,17 @@ export function AtlasPage() {
                 home={home ? keyOf(home) : undefined}
                 onSelect={select}
                 onHover={setHovered}
+                unmeasured={unmeasured}
+                overlay={
+                  air && environment.data && geo.data ? (
+                    <AirLayer
+                      environment={environment.data}
+                      geometry={geo.data}
+                      view={view}
+                      onHoverPlace={setHoveredPlace}
+                    />
+                  ) : undefined
+                }
                 label={
                   `${measure.label}${measure.bySex ? `, ${sexLabel(effectiveSex)}` : ''}, by country. ` +
                   `${atlasYear}. ${drawnValues.length} countries are drawn here; ` +
@@ -271,14 +313,37 @@ export function AtlasPage() {
               />
             )}
             <MapLegend scale={scale} measure={measure} />
-            <div className="mt-2">
-              <MapReadout
-                name={readoutCountry?.name ?? undefined}
-                unreported={unreported}
-                value={readoutIso ? values.get(readoutIso) : undefined}
-                measure={measure}
-                sexNote={measure.bySex ? `(${sexLabel(effectiveSex)})` : ''}
+            {air && environment.isLoading && <Loading label="Loading the monitoring stations…" />}
+            {air && environment.isError && (
+              <ErrorState message={(environment.error as Error).message} />
+            )}
+            {air && environment.data && geo.data && (
+              <AirLegend
+                environment={environment.data}
+                view={view}
+                drawnCountries={drawnCountries}
               />
+            )}
+            <div className="mt-2">
+              {/* A hovered STATION wins over a hovered country: the reader's pointer is on the dot, and
+                  the dot is the more specific thing under it. */}
+              {hoveredPlace ? (
+                <PlaceReadout
+                  place={hoveredPlace}
+                  reference={countryByKey(countries, hoveredPlace.iso3)?.env}
+                  countryName={countryByKey(countries, hoveredPlace.iso3)?.name ?? hoveredPlace.iso3}
+                />
+              ) : (
+                <MapReadout
+                  name={readoutCountry?.name ?? undefined}
+                  unreported={unreported}
+                  value={readoutIso ? values.get(readoutIso) : undefined}
+                  measure={measure}
+                  sexNote={measure.bySex ? `(${sexLabel(effectiveSex)})` : ''}
+                  noAirMeasurement={Boolean(readoutIso && unmeasured?.has(readoutIso))}
+                  nationalPm25={readoutCountry?.env?.pm25 ?? undefined}
+                />
+              )}
             </div>
           </Card>
 

@@ -17,6 +17,13 @@ export interface AtlasGeometry {
    * mistake. A test in geometry.data.test.ts pins the order that matters.
    */
   countries: Record<string, string>
+  /**
+   * The generator's own fit, so a lat/lon can be projected into the same space as `countries`.
+   *
+   * Optional because a geometry file generated before 2026-09 has no `_fit`; `projector()` returns
+   * null for one of those and the page draws no points rather than points in the wrong place.
+   */
+  _fit?: { minX: number; maxY: number; scale: number; width: number; height: number }
   /** Provenance, carried in the generated file so the page can attribute what it draws. */
   _source?: string
   _projection?: string
