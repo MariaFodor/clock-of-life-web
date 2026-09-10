@@ -1,8 +1,9 @@
 // The graph had no test at all, which is how its arrows shipped invisible: at rest they were drawn
-// with the hairline token used for card borders, which in dark mode composites to roughly
-// rgb(22,28,37) on a rgb(15,20,27) canvas. The drawing rendered as a list of chips in columns and
-// nothing failed. Colour is asserted here as a token choice rather than a pixel — jsdom does not
-// composite — but the structural invariants below are the ones that make the picture mean anything.
+// with the hairline token used for card borders, which over the Card's own `clock-surface`
+// (rgb(23,30,39) in dark mode) composites to rgb(28,35,45) — a contrast ratio of 1.06:1. The drawing
+// rendered as a list of chips in columns and nothing failed. Colour is asserted here as an exact
+// class rather than a pixel — jsdom does not composite — but pinning the token alone is not enough:
+// the defect was never the wrong token, it was an alpha too low to see.
 import { describe, expect, it } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { CausalGraph } from './CausalGraph'
@@ -15,7 +16,10 @@ const ONTOLOGY: Ontology = {
   waist: { role: 'lever', causes: ['diabetes', 'high_bp'],
            prior: { doi: '10.1136/bmj.m3324', first_author: 'Jayedi', year: 2020,
                     title: 'Central fatness and risk of all cause mortality' } },
-  diabetes: { role: 'manage', causes: [] },
+  // diabetes -> high_bp exists so that hovering `waist` has an edge between two of its OWN
+  // neighbours. Without one, "only edges touching the focus light up" and "every edge lights up"
+  // are the same assertion, and the real ontology has 32 such edges around waist alone.
+  diabetes: { role: 'manage', causes: ['high_bp'] },
   high_bp: { role: 'manage', causes: [] },
   sleep_long: { role: 'marker', causes: [] },
 }
@@ -24,7 +28,7 @@ describe('<CausalGraph/>', () => {
   it('draws every declared edge, and every one of them points forward', () => {
     const { container } = render(<CausalGraph ontology={ONTOLOGY} />)
     const edges = [...container.querySelectorAll('path[marker-end]')]
-    expect(edges).toHaveLength(4) // diet->waist, activity->waist, waist->diabetes, waist->high_bp
+    expect(edges).toHaveLength(5) // diet/activity->waist, waist->diabetes/high_bp, diabetes->high_bp
 
     // The layout claims a node sits one column right of its furthest-upstream cause. Grouping by
     // ROLE instead looked tidier and buried 14 edges inside a single column while sending 11
@@ -37,20 +41,26 @@ describe('<CausalGraph/>', () => {
       return Number(text.getAttribute('x'))
     }
     for (const [from, to] of [['diet', 'waist'], ['activity', 'waist'],
-                              ['waist', 'diabetes'], ['waist', 'high_bp']]) {
+                              ['waist', 'diabetes'], ['waist', 'high_bp'],
+                              ['diabetes', 'high_bp']]) {
       expect(xOf(to)).toBeGreaterThan(xOf(from))
     }
   })
 
-  it('draws its resting edges in a colour meant to be read on the canvas', () => {
+  it('draws its resting edges, and their heads, at a contrast you can actually read', () => {
     const { container } = render(<CausalGraph ontology={ONTOLOGY} />)
     for (const edge of container.querySelectorAll('path[marker-end]')) {
-      // `clock-muted` is a TEXT token, so it is legible on the canvas in both themes by definition.
-      // `clock-line` is a hairline for borders and is not.
-      expect(edge.getAttribute('class')).toContain('stroke-clock-muted')
+      // The EXACT class, not a substring: `stroke-clock-muted/5` contains "stroke-clock-muted" and
+      // is invisible. Muted at full opacity is 6.93:1 dark and 5.25:1 light on the card; every
+      // diluted value tested fell under WCAG 1.4.11's 3:1 in at least one theme.
+      expect(edge.getAttribute('class')?.split(/\s+/)).toContain('stroke-clock-muted')
       expect(edge.getAttribute('class')).not.toContain('stroke-clock-line')
       expect(Number(edge.getAttribute('stroke-width'))).toBeGreaterThanOrEqual(1)
     }
+    // The arrowhead is half of what makes an arrow an arrow. A head fainter than its own line reads
+    // as a fading stroke, and nothing checked it while the commit claimed it was matched.
+    const head = container.querySelector('marker#cg-arrow path')
+    expect(head?.getAttribute('class')?.split(/\s+/)).toContain('fill-clock-muted')
   })
 
   it('isolates one factor s path on hover, and says what it acts through', () => {
@@ -62,7 +72,11 @@ describe('<CausalGraph/>', () => {
     // focus drowns the one path being asked about, which is the whole reason for hovering.
     const lit = [...container.querySelectorAll('path[marker-end]')]
       .filter((p) => p.getAttribute('class')?.includes('stroke-clock-brand'))
-    expect(lit).toHaveLength(4) // all four touch waist in this slice
+    // 4 of the 5: diabetes->high_bp runs between two of waist's neighbours and must stay dark.
+    expect(lit).toHaveLength(4)
+    const dark = [...container.querySelectorAll('path[marker-end]')]
+      .filter((p) => p.getAttribute('class')?.includes('stroke-clock-line/20'))
+    expect(dark).toHaveLength(1)
 
     const status = container.querySelector('[role="status"]')!
     expect(status).toHaveTextContent('Acts through: Diabetes, Hypertension')
