@@ -46,12 +46,69 @@ export const ALCOHOL_LEVELS: Readonly<Record<string, number>> = Object.freeze({
 export const ALCOHOL_REFERENCE_LEVEL = 'light'
 const ALCOHOL_REFERENCE = ALCOHOL_LEVELS[ALCOHOL_REFERENCE_LEVEL]
 
-/** ENV term (RES-04), same formula as scoring.rs. */
-export const RO_PM25_REF = 14.0
-export const RO_NDVI_REF = 0.5
-function envTerm(pm25?: number, ndvi?: number): number {
-  const air = pm25 === undefined ? 0 : Math.log(1.095) * (pm25 - RO_PM25_REF) / 10
-  const green = ndvi === undefined ? 0 : Math.log(0.965) * (ndvi - RO_NDVI_REF) / 0.1
+/**
+ * What an average person in each scoreable country is exposed to — the value the ENV term is centred on.
+ *
+ * This replaced two constants, `RO_PM25_REF = 14.0` and `RO_NDVI_REF = 0.5`, which were applied to every
+ * country and were wrong for Romania as well: WHO measures 10.412 µg/m³ and Bucharest's
+ * population-weighted NDVI is 0.2539. Copied here for the same reason `STD` and `LITERATURE_BETA` are —
+ * the mock must score in a browser with no bundle to read — and pinned the same way: the parity test
+ * asserts every entry against `env_reference` in the vendored bundle's own baselines, so a drift is a
+ * failing test rather than a quietly different number.
+ */
+export const ENV_REFERENCE: Readonly<Record<string, { pm25: number; ndvi: number }>> = Object.freeze({
+  AT: { pm25: 9.535, ndvi: 0.2839 },
+  BE: { pm25: 9.562, ndvi: 0.284 },
+  BG: { pm25: 12.574, ndvi: 0.3439 },
+  CH: { pm25: 8.128, ndvi: 0.3795 },
+  CY: { pm25: 14.225, ndvi: 0.2092 },
+  CZ: { pm25: 10.968, ndvi: 0.3211 },
+  DE: { pm25: 8.692, ndvi: 0.3453 },
+  DK: { pm25: 7.713, ndvi: 0.2491 },
+  EE: { pm25: 5.249, ndvi: 0.2236 },
+  ES: { pm25: 8.029, ndvi: 0.252 },
+  FI: { pm25: 4.118, ndvi: 0.2409 },
+  FR: { pm25: 8.806, ndvi: 0.2844 },
+  GR: { pm25: 14.381, ndvi: 0.1796 },
+  HR: { pm25: 13.285, ndvi: 0.3924 },
+  HU: { pm25: 11.21, ndvi: 0.2841 },
+  IE: { pm25: 6.623, ndvi: 0.3156 },
+  IS: { pm25: 5.645, ndvi: 0.0673 },
+  IT: { pm25: 13.3, ndvi: 0.3198 },
+  LT: { pm25: 8.171, ndvi: 0.3086 },
+  LU: { pm25: 6.975, ndvi: 0.3269 },
+  LV: { pm25: 9.644, ndvi: 0.2644 },
+  MT: { pm25: 11.186, ndvi: 0.1611 },
+  NL: { pm25: 9.032, ndvi: 0.2715 },
+  NO: { pm25: 5.093, ndvi: 0.2939 },
+  PL: { pm25: 14.732, ndvi: 0.2939 },
+  PT: { pm25: 6.208, ndvi: 0.2856 },
+  RO: { pm25: 10.412, ndvi: 0.2539 },
+  SE: { pm25: 4.62, ndvi: 0.2488 },
+  SI: { pm25: 12.121, ndvi: 0.3982 },
+  SK: { pm25: 12.312, ndvi: 0.3179 },
+})
+
+/** Eurostat called Greece EL; the bundle and ISO call it GR. Stored profiles still say EL. */
+const ENV_ALIASES: Readonly<Record<string, string>> = Object.freeze({ EL: 'GR' })
+
+/** The country's own exposure reference, or `undefined` where there is none to centre on. */
+export const envReference = (country: string): { pm25: number; ndvi: number } | undefined =>
+  ENV_REFERENCE[ENV_ALIASES[country] ?? country]
+
+/**
+ * ENV term, same formula as `scoring.rs`: `ln(1.095)·(PM25−ref)/10 + ln(0.965)·(NDVI−ref)/0.1`.
+ *
+ * A country with no reference has its exposure left UNPRICED rather than priced at zero-deviation:
+ * pricing a deviation from an average nobody has measured is a guess wearing a number. The service
+ * returns the same 0.0 here and reports what it refused; the mock has nowhere to report, so it simply
+ * does not price it.
+ */
+function envTerm(country: string, pm25?: number, ndvi?: number): number {
+  const ref = envReference(country)
+  if (ref === undefined) return 0
+  const air = pm25 === undefined ? 0 : Math.log(1.095) * (pm25 - ref.pm25) / 10
+  const green = ndvi === undefined ? 0 : Math.log(0.965) * (ndvi - ref.ndvi) / 0.1
   return air + green
 }
 const z = (raw: number, key: string) => (raw - STD[key].mean) / STD[key].sd
@@ -144,7 +201,7 @@ function design(p: Profile): Record<string, number> {
 function extraLp(p: Profile): number {
   const alcohol =
     p.alcohol === undefined ? 0 : (ALCOHOL_LEVELS[p.alcohol] ?? ALCOHOL_REFERENCE) - ALCOHOL_REFERENCE
-  return alcohol + envTerm(p.pm25, p.ndvi)
+  return alcohol + envTerm(p.country, p.pm25, p.ndvi)
 }
 
 function linearPredictor(d: Record<string, number>): number {
