@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { countryByIso2, keyOf, measureById, ranked, rankOf, valueOf } from './measures'
+import {
+  MEASURES,
+  countryByIso2,
+  keyOf,
+  longUnitOf,
+  measureById,
+  ranked,
+  rankOf,
+  valueOf,
+} from './measures'
 import type { AtlasCountry } from '../../api/types'
 
 const country = (iso2: string, iso3: string, f: number, m: number, am = 100): AtlasCountry => ({
@@ -52,6 +61,50 @@ describe('ranking', () => {
   it('drops a country with no figure instead of ranking it at zero', () => {
     const blank = { ...country('XX', 'XXX', 0, 0), le0: {} }
     expect(ranked([...world, blank], 'le0', 'f')).toHaveLength(3)
+  })
+})
+
+describe('the words at the two ends of the legend', () => {
+  // The legend prints its class boundaries smallest-first for every measure. These labels hang off
+  // THOSE numbers, not off the colours — the colour ramp reverses on the mortality measure and
+  // reverses again between the light and the dark theme, and the numbers do neither.
+  it('describes lives where a bigger number means longer ones', () => {
+    expect(measureById('le0').legendEnds).toEqual({ low: 'shorter lives', high: 'longer lives' })
+    expect(measureById('le60').legendEnds).toEqual({ low: 'shorter lives', high: 'longer lives' })
+  })
+
+  it('swaps to the measure’s own words where a bigger number means the opposite', () => {
+    // "Deaths between 15 and 60" counts deaths, and its smallest numbers are its best news. Calling
+    // its low end "shorter lives" — the pair that is right on the other two maps — would put the
+    // words for the worst outcome next to the countries with the fewest deaths.
+    expect(measureById('am').legendEnds).toEqual({ low: 'fewer deaths', high: 'more deaths' })
+    expect(measureById('am').higherIsBetter).toBe(false)
+  })
+
+  it('never calls a wide women–men gap a long life', () => {
+    expect(measureById('gap').legendEnds).toEqual({ low: 'narrower gap', high: 'wider gap' })
+    for (const end of Object.values(measureById('gap').legendEnds)) {
+      expect(end).not.toMatch(/lives/)
+    }
+  })
+
+  it('gives every measure both ends, so a new one cannot ship with an unlabelled legend', () => {
+    for (const m of MEASURES) {
+      expect(m.legendEnds.low, m.id).toBeTruthy()
+      expect(m.legendEnds.high, m.id).toBeTruthy()
+      expect(m.legendEnds.low, m.id).not.toBe(m.legendEnds.high)
+    }
+  })
+})
+
+describe('units', () => {
+  it('spells the unit out where there is room and keeps it short where there is not', () => {
+    // "128" on a card next to "79.6 years" is the defect; "128 per 1,000 alive at 15" in a table
+    // cell is the overcorrection. Both forms exist so each place can use the one that fits.
+    expect(longUnitOf(measureById('am'))).toBe('per 1,000 alive at 15')
+    expect(measureById('am').unit).toBe('per 1,000')
+    // Nothing to spell out on the year measures: the long form falls back to the short one.
+    expect(longUnitOf(measureById('le0'))).toBe('years')
   })
 })
 
