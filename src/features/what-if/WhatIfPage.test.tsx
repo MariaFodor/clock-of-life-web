@@ -218,6 +218,29 @@ describe('<WhatIfPage/>', () => {
     expect(screen.queryByText(/cigarettes\/day/)).not.toBeInTheDocument()
   })
 
+  // The "best" badge is the one claim on this board that carries the round-7 harm — it is what
+  // turned a mislabelled row into "smoking more is your best option". A single token (max for min,
+  // > for >=) reproduces that, and nothing tested it: the only board test saved one scenario, so
+  // ranking across rows was entirely unpinned.
+  it('badges the better of two saved scenarios, and only that one', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+    const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
+
+    const priceAndSave = async (v: string) => {
+      fireEvent.change(dose, { target: { value: v } })
+      await user.click(screen.getByRole('button', { name: /see the effect/i }))
+      await screen.findByRole('button', { name: /save to compare/i })
+      await user.click(screen.getByRole('button', { name: /save to compare/i }))
+    }
+    await priceAndSave('5')   // a real cut: a gain
+    await priceAndSave('30')  // smoking more: a loss
+
+    const rowOf = (text: RegExp) => screen.getByText(text).closest('tr')!
+    expect(rowOf(/^5 cigarettes\/day$/)).toHaveTextContent('best')
+    expect(rowOf(/^30 cigarettes\/day$/)).not.toHaveTextContent('best')
+  })
+
   it('never offers a zero dose, which the model reads as unanswered rather than as quitting', () => {
     renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
     // min=1: the service refuses a zero dose from a smoker, because scoring it would impute the

@@ -113,7 +113,10 @@ export function WhatIfPage() {
     }])
   }
 
-  // Best = the largest gain in years (ties broken by insertion order).
+  // Best = the largest gain in years. Ties are NOT broken — every row holding the maximum is badged,
+  // which is honest and is reachable: quitting and becoming a former smoker price identically,
+  // because the service maps any reduction in smoking to the never-smoker contrast. (This comment
+  // used to claim insertion order broke them. It does not, and never did.)
   const bestDelta = scenarios.length ? Math.max(...scenarios.map((s) => s.result.delta_years)) : null
 
   return (
