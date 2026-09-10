@@ -10,7 +10,7 @@
 // so a bundle change turns the guard red until someone regenerates, instead of leaving a stale
 // fixture that every atlas test then validates against.
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,7 +18,13 @@ import { fileURLToPath } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 const base = process.env.CLOCK_BASE ?? 'http://127.0.0.1:8080'
 
-const manifestPath = join(here, '..', '..', 'clock-of-life-service', 'bundle', 'model-v4.0.0', 'manifest.json')
+// Discovered, not hardcoded. This line said `model-v4.0.0` and broke the moment the service vendored
+// v4.1.1 — the regeneration step that exists to unbreak the drift guard could not itself run. Same
+// rule as the guard it feeds: a tool that needs hand-editing to keep working stops working.
+const bundles = join(here, '..', '..', 'clock-of-life-service', 'bundle')
+const bundleDir = readdirSync(bundles).filter((d) => d.startsWith('model-v')).sort().pop()
+if (!bundleDir) throw new Error(`no model bundle under ${bundles} — is the service checked out beside this repo?`)
+const manifestPath = join(bundles, bundleDir, 'manifest.json')
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 const stamp = createHash('sha256')
   .update(JSON.stringify(manifest.checksums, Object.keys(manifest.checksums).sort()))

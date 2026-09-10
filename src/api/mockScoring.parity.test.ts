@@ -16,8 +16,8 @@ import {
   ALCOHOL_REFERENCE_LEVEL,
   effectiveBeta,
   effectiveStandardizer,
-  RO_NDVI_REF,
-  RO_PM25_REF,
+  ENV_REFERENCE,
+  envReference,
   relativeRisk,
 } from './mockScoring'
 import { effectiveCigsDay, REDUCTION_NOTE, SMOKER_MEAN_CIGS } from './modelRules'
@@ -96,25 +96,31 @@ const bundle = JSON.parse(readFileSync(BUNDLE, 'utf8')) as {
   standardizer: Record<string, { mean: number; sd: number }>
 }
 
-// The service's own ENV reference points live in code, not the bundle — read them from the source
-// of truth rather than restating them here, which would make the assertion a tautology (gap 3).
-const SCORING_RS = resolve(SERVICE_DIR, 'src/scoring.rs')
-function serviceConst(name: string): number {
-  if (!existsSync(SCORING_RS)) {
-    throw new Error(`Parity fixture missing: ${SCORING_RS} (the service's ENV constants live there).`)
+/** The scoreable countries and each one's measured exposure reference, read from the bundle itself. */
+const MANIFEST = resolve(SERVICE_DIR, 'bundle', BUNDLE_VERSION, 'manifest.json')
+function bundleEnvReferences(): Record<string, { pm25: number; ndvi: number | null }> {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8')) as { countries: string[] }
+  const out: Record<string, { pm25: number; ndvi: number | null }> = {}
+  for (const iso of manifest.countries) {
+    const path = resolve(SERVICE_DIR, 'bundle', BUNDLE_VERSION, 'baselines', `${iso}.json`)
+    const baseline = JSON.parse(readFileSync(path, 'utf8')) as {
+      env_reference?: { pm25: number; ndvi: number | null }
+    }
+    if (!baseline.env_reference) {
+      throw new Error(
+        `Parity fixture broken: ${iso}.json carries no env_reference, but the bundle's own release ` +
+          'gate requires one for every scoreable country. The bundle is wrong, not this test.',
+      )
+    }
+    out[iso] = baseline.env_reference
   }
-  const src = readFileSync(SCORING_RS, 'utf8')
-  // Line-anchored, so a commented-out declaration can never be matched instead.
-  const m = new RegExp(`^\\s*pub const ${name}: f64 = ([0-9.]+);`, 'm').exec(src)
-  if (!m) {
-    throw new Error(
-      `could not find "pub const ${name}: f64 = <number>;" in ${SCORING_RS} — if the service ` +
-        'changed how it declares the ENV reference points, update this parity test with it.',
-    )
-  }
-  return Number(m[1])
+  return out
 }
 
+// The service's ENV reference points used to live in code as two constants. They now live in the
+// bundle, per country, so the assertion below reads them from there — but scoring.rs is still read, for
+// the grep gate that proves the old constants are gone rather than merely unused here.
+const SCORING_RS = resolve(SERVICE_DIR, 'src/scoring.rs')
 const CONTINUOUS = ['diet', 'sedentary', 'stress'] as const
 
 describe('mock ↔ bundle parity (literature levers)', () => {
@@ -146,9 +152,51 @@ describe('mock ↔ bundle parity (literature levers)', () => {
     expect(plusOneSd - atMean).toBeCloseTo(bundle.literature[key].beta!, 10)
   })
 
-  it('the environment reference points match the service constants', () => {
-    expect(RO_PM25_REF).toBe(serviceConst('RO_PM25_REF'))
-    expect(RO_NDVI_REF).toBe(serviceConst('RO_NDVI_REF'))
+  // These were two constants — RO_PM25_REF = 14.0 and RO_NDVI_REF = 0.5 — applied to every country and
+  // wrong for Romania too. They are now per-country measured values in the bundle, so the assertion
+  // covers all thirty rather than restating two numbers.
+  it("every country's exposure reference matches the bundle's own baseline, and none is missing", () => {
+    const fromBundle = bundleEnvReferences()
+    expect(Object.keys(ENV_REFERENCE).sort()).toEqual(Object.keys(fromBundle).sort())
+    for (const [iso, ref] of Object.entries(fromBundle)) {
+      expect(ENV_REFERENCE[iso].pm25, `${iso} pm25`).toBe(ref.pm25)
+      expect(ENV_REFERENCE[iso].ndvi, `${iso} ndvi`).toBe(ref.ndvi)
+    }
+  })
+
+  it('the deleted constants are really gone from the service, not merely unused here', () => {
+    const src = readFileSync(SCORING_RS, 'utf8')
+    // A grep gate, because the failure this guards against is the mock being updated while the service
+    // keeps a second, stale copy of the same number — which is how these two files drifted before.
+    expect(src).not.toMatch(/^\s*pub const RO_PM25_REF/m)
+    expect(src).not.toMatch(/^\s*pub const RO_NDVI_REF/m)
+  })
+
+  it('a reader at their own country average scores exactly neutral, in every scoreable country', () => {
+    // The property the old constants only had for a reader living at an invented 14.0 µg/m³.
+    for (const [iso, ref] of Object.entries(ENV_REFERENCE)) {
+      const base: Profile = {
+        country: iso, age: 50, sex: 'M', smoke: 0, pa_min: 600, sleep: 7, waist: 94, bmi: 28.9,
+      }
+      const bare = Math.log(relativeRisk(base))
+      const atAverage = Math.log(relativeRisk({ ...base, pm25: ref.pm25, ndvi: ref.ndvi }))
+      expect(atAverage - bare, `${iso} is neutral at its own average`).toBeCloseTo(0, 10)
+    }
+  })
+
+  it('the same air is priced differently in two countries with different averages', () => {
+    const at = (country: string) => {
+      const p: Profile = {
+        country, age: 50, sex: 'M', smoke: 0, pa_min: 600, sleep: 7, waist: 94, bmi: 28.9, pm25: 12,
+      }
+      return Math.log(relativeRisk(p))
+    }
+    // Finland 4.118 vs Poland 14.732: 12 µg/m³ is dirty in Helsinki and clean in Warsaw.
+    expect(at('FI')).toBeGreaterThan(at('PL'))
+  })
+
+  it('EL still resolves, because stored profiles say EL and the bundle says GR', () => {
+    expect(envReference('EL')).toEqual(envReference('GR'))
   })
 
   // The mock told a DIFFERENT evidence story from the service: it said reduction "trials" show
