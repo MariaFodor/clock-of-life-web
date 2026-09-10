@@ -102,3 +102,79 @@ describe('what each view is for', () => {
     expect(world.countries.ROU).not.toEqual(europe.countries.ROU)
   })
 })
+
+// The claims the header comments make — equal-area, north-up — were not gated until a review proved
+// it by sabotage: removing the y-flip gives an upside-down world, and swapping Equal Earth for
+// Mercator inflates Europe against Africa by 226%, and BOTH passed every test above. Shape invariants
+// cannot catch either, because neither changes the shape of the file.
+
+/** Signed-area magnitude of every ring in a path, in viewBox units. */
+function drawnArea(d: string): number {
+  let total = 0
+  for (const ring of d.split('M').slice(1)) {
+    const pts = points(ring)
+    let s = 0
+    for (let i = 0; i < pts.length; i++) {
+      const [x1, y1] = pts[i]
+      const [x2, y2] = pts[(i + 1) % pts.length]
+      s += x1 * y2 - x2 * y1
+    }
+    total += Math.abs(s / 2)
+  }
+  return total
+}
+
+/** Mean y of a country's vertices — a crude centroid, which is all a north/south test needs. */
+function meanY(d: string): number {
+  const ys = points(d).map(([, y]) => y)
+  return ys.reduce((a, b) => a + b, 0) / ys.length
+}
+
+describe('the projection is what it says it is', () => {
+  // The JSON import infers a literal type with one property per country, which cannot be indexed by
+  // a variable; the declared shape can.
+  const W = world as AtlasGeometry
+  const E = europe as AtlasGeometry
+
+  // km², CIA World Factbook. Chosen to span latitudes, because that is the axis an area-inflating
+  // projection distorts along.
+  const TRUE_AREA: Record<string, number> = {
+    NOR: 323802, SWE: 450295, FIN: 338424, RUS: 17098242, CAN: 9984670,
+    FRA: 551695, ESP: 505992, TUR: 783562, EGY: 1001450, IND: 3287263,
+    KEN: 580367, NGA: 923768, BRA: 8515770, COD: 2344858, ZAF: 1219090,
+    AUS: 7741220, ARG: 2780400, IDN: 1904569,
+  }
+
+  it('draws every country at the same scale, whatever its latitude', () => {
+    const ratios = Object.entries(TRUE_AREA)
+      .filter(([iso]) => iso in W.countries)
+      .map(([iso, km2]) => drawnArea(W.countries[iso]) / km2)
+    expect(ratios.length).toBeGreaterThan(12)
+    // Measured on the shipped file: 1.35, and the spread is coastline simplification (Norway's
+    // fjords), not the projection. Mercator would put Sweden against Kenya alone at roughly 5x.
+    const spread = Math.max(...ratios) / Math.min(...ratios)
+    expect(spread, `area-per-km² spread of ${spread.toFixed(2)}x — is this still equal-area?`)
+      .toBeLessThan(1.8)
+  })
+
+  it('puts north at the top', () => {
+    // SVG y grows downward, so a northern country must have the SMALLER mean y. Dropping the flip in
+    // the generator inverts every one of these and changes nothing else about the file.
+    for (const [north, south] of [['NOR', 'ZAF'], ['CAN', 'BRA'], ['SWE', 'EGY']]) {
+      expect(meanY(W.countries[north]),
+             `${north} should be drawn above ${south}`).toBeLessThan(meanY(W.countries[south]))
+    }
+    expect(meanY(E.countries.ISL)).toBeLessThan(meanY(E.countries.ESP))
+  })
+
+  it('paints an enclave after the country that surrounds it', () => {
+    // Holes are discarded — every one is a genuine enclave owned by another country's feature, so
+    // nothing paints water as land. But that makes visibility depend on PAINT ORDER: South Africa's
+    // fill covers all 27 px² of Lesotho, so a consumer that reorders these keys erases a country's
+    // data point. Insertion order is the contract, and this is where it is written down.
+    const order = Object.keys(W.countries)
+    expect(order.indexOf('LSO')).toBeGreaterThan(order.indexOf('ZAF'))
+    const euro = Object.keys(E.countries)
+    if (euro.includes('SMR')) expect(euro.indexOf('SMR')).toBeGreaterThan(euro.indexOf('ITA'))
+  })
+})

@@ -8,6 +8,14 @@
 /** One projected view: SVG paths keyed by ISO 3166-1 alpha-3, already fitted to `viewBox`. */
 export interface AtlasGeometry {
   viewBox: string
+  /**
+   * PAINT THESE IN KEY ORDER. Interior rings are discarded by the generator — every one is a genuine
+   * enclave that another country's own feature draws — which makes an enclave's visibility depend on
+   * what is painted after what. South Africa's fill covers all 27 px² of Lesotho, so a consumer that
+   * sorts these keys (an alphabetical legend, a stable key list) silently erases a country's data
+   * point. `Object.entries` preserves insertion order, so the default is correct; sorting is the
+   * mistake. A test in geometry.data.test.ts pins the order that matters.
+   */
   countries: Record<string, string>
   /** Provenance, carried in the generated file so the page can attribute what it draws. */
   _source?: string
