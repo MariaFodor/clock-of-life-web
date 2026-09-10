@@ -57,8 +57,12 @@ describe('<CausalGraph/>', () => {
       // The EXACT class, not a substring: `stroke-clock-muted/5` contains "stroke-clock-muted" and
       // is invisible. Muted at full opacity is 6.93:1 dark and 5.25:1 light on the card; every
       // diluted value tested fell under WCAG 1.4.11's 3:1 in at least one theme.
-      expect(edge.getAttribute('class')?.split(/\s+/)).toContain('stroke-clock-muted')
+      const classes = edge.getAttribute('class')?.split(/\s+/) ?? []
+      expect(classes).toContain('stroke-clock-muted')
       expect(edge.getAttribute('class')).not.toContain('stroke-clock-line')
+      // A sibling `opacity-5` dilutes the stroke just as thoroughly as `stroke-clock-muted/5` and
+      // leaves the exact token intact, so pinning the token alone is not the whole guard.
+      expect(classes.filter((c) => /^opacity-/.test(c))).toEqual([])
       expect(Number(edge.getAttribute('stroke-width'))).toBeGreaterThanOrEqual(1)
     }
     // The arrowhead is half of what makes an arrow an arrow. A head fainter than its own line reads
