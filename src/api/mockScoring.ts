@@ -316,7 +316,8 @@ export function attributions(p: Profile): Attribution[] {
     const delta = round1(userYears - refYears) // user minus "if this factor were average"
     if (Math.abs(delta) < 0.05) continue
     out.push({
-      factor: f.factor, delta_years: delta, evidence: f.evidence, role: f.role, citation: f.citation,
+      key: f.key, factor: f.factor, delta_years: delta, evidence: f.evidence, role: f.role,
+      citation: f.citation,
       // The real service always ships a resolvable link with every factor; the mock must too, or
       // the tests would pass on a page that shows unlinkable citations in production.
       doi: f.doi, url: `https://doi.org/${f.doi}`, first_author: f.firstAuthor, year: f.year,

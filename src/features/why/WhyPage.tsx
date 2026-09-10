@@ -47,7 +47,13 @@ export function WhyPage() {
             and yet, once we already know your blood pressure and blood sugar, adds little on its own —
             those are the road it travels by.
           </p>
-          <CausalGraph ontology={ontology.data} />
+          {/* The reader's own breakdown, so the drawing is about them rather than about the model.
+              It renders before the breakdown query resolves — the graph is worth showing on its own
+              and the bars simply arrive with the numbers. */}
+          <CausalGraph
+            ontology={ontology.data}
+            impact={Object.fromEntries((query.data ?? []).map((a) => [a.key, a.delta_years]))}
+          />
         </Card>
       )}
 

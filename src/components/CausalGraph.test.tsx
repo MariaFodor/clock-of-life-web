@@ -98,6 +98,63 @@ describe('<CausalGraph/>', () => {
     expect(link).toHaveAttribute('rel', 'noreferrer')
   })
 
+  // Without `impact` this is a diagram of the model, identical for everyone. Nobody asked how the
+  // model works; they asked why THEIR number is what it is, and the answer is which of these roads
+  // their own factors are travelling.
+  describe('with the reader\'s own numbers', () => {
+    const IMPACT = { waist: -1.2, diet: -0.4, activity: 0.3 }
+
+    it('shows each factor s own years, signed, and sizes its bar against the largest', () => {
+      const { container } = render(<CausalGraph ontology={ONTOLOGY} impact={IMPACT} />)
+      const texts = [...container.querySelectorAll('text')].map((t) => t.textContent)
+      expect(texts).toContain('−1.2')
+      expect(texts).toContain('−0.4')
+      expect(texts).toContain('+0.3') // a factor that ADDS years reads as a gain, not a smaller loss
+
+      // Bars are a share of the reader's biggest factor, so the picture is scaled to them. Found by
+      // node, not by DOM index: nodes are emitted column by column, so index order is layout order.
+      expect(container.querySelectorAll('rect[aria-hidden="true"]')).toHaveLength(3) // only the
+      const barOf = (aria: string) =>                                               // three they
+        Number(screen.getByLabelText(aria)                                          // deviate on
+          .querySelector('rect[aria-hidden="true"]')!.getAttribute('width'))
+      expect(barOf('Waist: lever, costing you 1.2 years')).toBeCloseTo(150, 5)
+      expect(barOf('Diet: lever, costing you 0.4 years')).toBeCloseTo(150 * (0.4 / 1.2), 5)
+      expect(barOf('Activity: lever, worth you 0.3 years')).toBeCloseTo(150 * (0.3 / 1.2), 5)
+    })
+
+    it('puts the reader s biggest factors where the eye lands', () => {
+      const { container } = render(<CausalGraph ontology={ONTOLOGY} impact={IMPACT} />)
+      // diet and activity share a column; diet costs more, so it sorts first. Alphabetically it
+      // would too, which is why the assertion flips the numbers to prove the sort is on impact.
+      const yOf = (label: string) =>
+        Number([...container.querySelectorAll('text')]
+          .find((t) => t.textContent === label)!.getAttribute('y'))
+      expect(yOf('Diet')).toBeLessThan(yOf('Activity'))
+
+      const { container: flipped } = render(
+        <CausalGraph ontology={ONTOLOGY} impact={{ diet: -0.1, activity: 2.0 }} />)
+      const yIn = (label: string) =>
+        Number([...flipped.querySelectorAll('text')]
+          .find((t) => t.textContent === label)!.getAttribute('y'))
+      expect(yIn('Activity')).toBeLessThan(yIn('Diet'))
+    })
+
+    it('tells a screen reader the number, not just that a bar is there', () => {
+      render(<CausalGraph ontology={ONTOLOGY} impact={IMPACT} />)
+      expect(screen.getByLabelText('Waist: lever, costing you 1.2 years')).toBeInTheDocument()
+      expect(screen.getByLabelText('Activity: lever, worth you 0.3 years')).toBeInTheDocument()
+      // A factor they sit at the average on says nothing about years at all.
+      expect(screen.getByLabelText('Long sleep: marker')).toBeInTheDocument()
+    })
+
+    it('is still a truthful drawing with no numbers at all', () => {
+      const { container } = render(<CausalGraph ontology={ONTOLOGY} />)
+      expect(container.querySelectorAll('rect[aria-hidden="true"]')).toHaveLength(0)
+      expect(container.querySelectorAll('path[marker-end]')).toHaveLength(5)
+      expect(screen.getByLabelText('Waist: lever')).toBeInTheDocument()
+    })
+  })
+
   it('mounts the live region empty, so a screen reader announces what lands in it', () => {
     const { container } = render(<CausalGraph ontology={ONTOLOGY} />)
     const status = container.querySelector('[role="status"]')
