@@ -5,7 +5,7 @@
 // the web's view types (src/api/types.ts). This is the seam the mock also implements, so pages and hooks
 // are identical against either.
 
-import type { AtlasData, AtlasEnvironment } from './types'
+import type { AtlasData, AtlasEnvironment, CountryPlaces } from './types'
 
 import type { ApiClient } from './client'
 import { EVIDENCE_GRADES } from './types'
@@ -282,6 +282,10 @@ export function createHttpClient(): ApiClient {
       // route added here was written the other way and 404'd — through every unit test, because they
       // run against the mock. Only the browser found it.
       return get<AtlasEnvironment>('/atlas/environment')
+    },
+
+    async getPlaces(iso3: string): Promise<CountryPlaces> {
+      return get<CountryPlaces>(`/places/${encodeURIComponent(iso3)}`)
     },
 
     async getStats(): Promise<CohortStat[]> {

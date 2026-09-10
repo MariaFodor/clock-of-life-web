@@ -6,7 +6,7 @@
 
 import atlasFixture from '../features/atlas/atlas.fixture.json'
 
-import type { AtlasData, AtlasEnvironment } from './types'
+import type { AtlasData, AtlasEnvironment, CountryPlaces } from './types'
 
 import type { ApiClient } from './client'
 import type {
@@ -79,7 +79,15 @@ export function createMockClient(): ApiClient {
       return {
         model_version: '2.0.0',
         algorithm: 'cox_ph',
-        countries: ['RO'],
+        countries: ['RO', 'DE', 'FR', 'IT', 'ES', 'PL'],
+        country_options: [
+          { iso2: 'RO', iso3: 'ROU', name: 'Romania', settlements: 60 },
+          { iso2: 'DE', iso3: 'DEU', name: 'Germany', settlements: 249 },
+          { iso2: 'FR', iso3: 'FRA', name: 'France', settlements: 200 },
+          { iso2: 'IT', iso3: 'ITA', name: 'Italy', settlements: 266 },
+          { iso2: 'ES', iso3: 'ESP', name: 'Spain', settlements: 244 },
+          { iso2: 'PL', iso3: 'POL', name: 'Poland', settlements: 158 },
+        ],
         assumptions: [
           'statistical estimate, not a prediction or diagnosis',
           'relative risk centred on the selected country’s average person',
@@ -282,6 +290,46 @@ export function createMockClient(): ApiClient {
       // a fixture invented in this repo is a second source of truth that drifts silently, which is
       // the whole failure this surface was redesigned to avoid.
       return atlasFixture as AtlasData
+    },
+
+    async getPlaces(iso3: string): Promise<CountryPlaces> {
+      // Derived from the environment fixture and the atlas fixture rather than being a third generated
+      // file: the two together already carry every settlement's coordinates and every country's
+      // exposure reference, and a 700 KB places fixture would be the largest thing in this repo.
+      //
+      // ONE fidelity gap, stated rather than hidden: the environment payload carries no per-city
+      // greenness (it is a country figure for 3,066 of the 3,521 settlements, and a value that is
+      // usually the country's cannot be drawn as a property of a point), so every place here reports
+      // `ndvi_basis: 'country'`. Against the real service, 426 of them say 'city'. The mock is for
+      // offline UI work; the shipped client is the http one.
+      const env = await this.getEnvironment()
+      const atlas = await this.getAtlas()
+      const country = atlas.countries.find((c) => c.iso3 === iso3)
+      const places = env.points
+        .filter((p) => p.iso3 === iso3)
+        .map((p) => ({
+          iso3: p.iso3, city: p.city, lat: p.lat, lon: p.lon, population: null,
+          pm25: p.pm25, pm25_year: p.year, pm25_stations: null, pm25_temporal_coverage: null,
+          ndvi: country?.env?.ndvi ?? null,
+          ndvi_year: null,
+          ndvi_basis: (country?.env?.ndvi == null ? null : 'country') as 'city' | 'country' | null,
+          ndvi_matched_city: null, ndvi_distance_km: null,
+        }))
+        .sort((a, b) => a.city.localeCompare(b.city))
+      return {
+        iso3,
+        iso2: country?.iso2 ?? null,
+        name: country?.name ?? null,
+        scoreable: country?.scoreable ?? false,
+        reference: country?.env ?? null,
+        places,
+        coverage: {
+          settlements: places.length,
+          with_city_greenness: 0,
+          with_country_greenness: places.filter((p) => p.ndvi_basis === 'country').length,
+          without_greenness: places.filter((p) => p.ndvi_basis === null).length,
+        },
+      }
     },
 
     async getEnvironment(): Promise<AtlasEnvironment> {

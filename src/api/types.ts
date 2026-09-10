@@ -104,7 +104,29 @@ export interface Meta {
   model_version: string
   algorithm: string
   countries: string[]
+  /**
+   * The same countries with names and ISO3 codes, for the interview's country question.
+   *
+   * Served rather than kept here, because a copy of 30 country names in the front end is a second
+   * thing to update when the 31st arrives — and because until this shipped there WAS no country
+   * question: `buildProfile` returned `country: 'RO'` for everyone.
+   *
+   * Optional: a service older than this change does not send it, and the question then says so rather
+   * than falling back to a guess.
+   */
+  country_options?: CountryOption[]
+  /** Codes that used to be valid and now resolve elsewhere — `{"EL": "GR"}`. */
+  country_aliases?: Record<string, string>
   assumptions: string[]
+}
+
+export interface CountryOption {
+  iso2: string
+  /** The settlement picker keys on ISO3; a profile stores ISO2. Both travel together. */
+  iso3: string | null
+  name: string | null
+  /** How many measured settlements this country has, so the picker can say what to expect. */
+  settlements: number
 }
 
 /** db.rs `CalcRow` — one row of history from GET /api/calculations. */
@@ -290,6 +312,53 @@ export interface AtlasCountryEnv {
    * anything that shows `ndvi` has to be able to say how thin it is.
    */
   ndvi_cities: number | null
+}
+
+/** One settlement as the interview's city question offers it. */
+export interface Place {
+  iso3: string
+  city: string
+  lat: number
+  lon: number
+  population: number | null
+  pm25: number
+  pm25_year: number
+  pm25_stations: number | null
+  pm25_temporal_coverage: number | null
+  ndvi: number | null
+  ndvi_year: number | null
+  /**
+   * `'city'` — greenness measured in this settlement. `'country'` — this country's figure, shown here
+   * because this settlement has none. `null` — no greenness at all.
+   *
+   * The word is not decoration: 3,066 of the 3,521 settlements carry their country's figure, and one
+   * rendered bare reads as a measurement of that city.
+   */
+  ndvi_basis: 'city' | 'country' | null
+  ndvi_matched_city: string | null
+  ndvi_distance_km: number | null
+}
+
+export interface CountryPlaces {
+  iso3: string
+  iso2: string | null
+  name: string | null
+  /** Whether a personal estimate is possible for someone living here at all. */
+  scoreable: boolean
+  /** What the ENV term is centred on here, so a reading can be shown against its own country. */
+  reference: AtlasCountryEnv & {
+    pm25_low?: number | null
+    pm25_high?: number | null
+    pm25_by_area?: Record<string, number>
+    ndvi_derived_from?: string[] | null
+  } | null
+  places: Place[]
+  coverage: {
+    settlements: number
+    with_city_greenness: number
+    with_country_greenness: number
+    without_greenness: number
+  }
 }
 
 /** One settlement with a measured reading, as the map draws it. */

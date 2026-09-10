@@ -40,6 +40,23 @@ export function useLocations() {
   return useQuery({ queryKey: queryKeys.locations, queryFn: () => getClient().listLocations() })
 }
 
+/**
+ * The measured settlements in one country. Disabled until a country is chosen, because there is no
+ * sensible "all countries" answer here — offering every settlement is how the relocate surface came to
+ * show a German reader seven Romanian cities.
+ */
+export function usePlaces(iso3: string | null) {
+  return useQuery({
+    queryKey: ['places', iso3],
+    queryFn: () => getClient().getPlaces(iso3!),
+    staleTime: Infinity,
+    enabled: Boolean(iso3),
+    // A country with no measurement since 2020 answers 404, and that is a fact rather than a fault:
+    // retrying it three times just delays the honest message by a second.
+    retry: false,
+  })
+}
+
 /** The world's life tables. Ships with the model version, so it cannot change under a session. */
 export function useAtlas() {
   return useQuery({ queryKey: ['atlas'], queryFn: () => getClient().getAtlas(), staleTime: Infinity })

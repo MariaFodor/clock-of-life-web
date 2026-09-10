@@ -83,7 +83,10 @@ describe('aggregation formulas (LEV-04)', () => {
   // recorded a 75-a-day smoker as smoking 60, silently, and changed their estimate. Both halves are
   // pinned: what we keep, and that we say something when we cannot keep it.
   it("keeps a heavy smoker's real answer, and speaks up when it cannot", () => {
-    const smoker = { ...DEFAULT_ANSWERS, SMK: 'current' as const }
+    // COUNTRY is part of a real profile now and deliberately NOT in DEFAULT_ANSWERS: a pre-filled
+    // country would be the most harmful default in the questionnaire, since it picks the life table.
+    // buildProfile says so through `errors` when it is missing, so the fixture supplies it.
+    const smoker = { ...DEFAULT_ANSWERS, COUNTRY: { iso2: 'RO', iso3: 'ROU', name: 'Romania' }, SMK: 'current' as const }
     expect(buildProfile({ ...smoker, CIGS: 75 }).profile.cigs_day).toBe(75)
     expect(buildProfile({ ...smoker, CIGS: 75 }).errors).toEqual([])
     expect(buildProfile({ ...smoker, CIGS: 80 }).profile.cigs_day).toBe(80)

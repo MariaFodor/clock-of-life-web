@@ -8,7 +8,7 @@
 
 import type { Profile } from '../../api/types'
 
-export type QuestionType = 'number' | 'radio' | 'checkboxes' | 'battery' | 'location'
+export type QuestionType = 'number' | 'radio' | 'checkboxes' | 'battery' | 'location' | 'country'
 
 export interface Option {
   value: string
@@ -49,9 +49,23 @@ export interface LocationAnswer {
   country: string
   pm25?: number
   ndvi?: number
+  /** The year the reading was taken; 2020-2025 across the database, so it is never assumed. */
+  pm25_year?: number
+  /** Whether the greenness is this city's own measurement or its country's figure. */
+  ndvi_basis?: 'city' | 'country' | null
 }
 
-export type Answers = Record<string, string | string[] | number | number[] | LocationAnswer | undefined>
+/** The answer to Q0_country: both codes, because scoring keys on ISO2 and the city list on ISO3. */
+export interface CountryAnswer {
+  iso2: string
+  iso3: string | null
+  name: string | null
+}
+
+export type Answers = Record<
+  string,
+  string | string[] | number | number[] | LocationAnswer | CountryAnswer | undefined
+>
 
 const FREQ: Option[] = [
   { value: 'never', label: 'Never / rarely' },
@@ -64,8 +78,16 @@ const FREQ: Option[] = [
 export const SECTIONS: Section[] = [
   {
     title: 'About you',
-    whyWeAsk: 'Your age and sex set your starting point on the national life table; the rest gives context.',
+    whyWeAsk:
+      'Your country decides WHICH national life table the estimate counts down from, and who counts as ' +
+      'an average person to compare you with. Your age and sex set your starting point on that table; ' +
+      'the rest gives context.',
     questions: [
+      // FIRST, and required. It chooses the life table and the reference population, so there is no
+      // sensible default — which is exactly why the previous default was wrong: every profile was sent
+      // as `country: 'RO'`, so a German reader was scored against Romanian death rates and centred on
+      // Romanian smoking and weight rates, and then told Romania was the country on their profile.
+      { code: 'COUNTRY', apiCode: 'Q0_country', prompt: 'Which country do you live in?', type: 'country', scored: true },
       { code: 'AGE', apiCode: 'Q1_age', prompt: 'What is your age?', type: 'number', unit: 'years', scored: true },
       { code: 'SEX', apiCode: 'Q2_sex', prompt: 'What is your sex?', type: 'radio', scored: true, options: [
         { value: 'F', label: 'Female' },
@@ -367,9 +389,29 @@ export function buildProfile(a: Answers): ProfileDraft {
   // The Q22 checkbox is binary; the service scores the fitted any-difficulty encoding either way.
   const mobility = hist.includes('mobility') ? (1 as const) : undefined
   const loc = a.LOCATION as LocationAnswer | undefined
+  const answeredCountry = (a.COUNTRY as CountryAnswer | undefined)?.iso2
+
+  if (!answeredCountry) {
+    // This BLOCKS the calculate button (`errors.length` disables it), and that is deliberate rather
+    // than incidental: without a country the estimate would be counted down from somebody else's
+    // national death rates and centred on somebody else's average person. A number about the wrong
+    // country is worse than no number.
+    errors.push(
+      'Choose the country you live in — the first question. It decides which national life table your ' +
+        'years are counted from and who counts as an average person to compare you with, so an ' +
+        'estimate without it would be about somewhere else.',
+    )
+  }
 
   const profile: Profile = {
-    country: 'RO',
+    // The answer, not a constant. `'RO'` was hardcoded here and it was not a placeholder that only
+    // affected a label: `country` selects the qx table the years are counted from AND the reference
+    // person the relative risk is centred on, so it moved every non-Romanian reader's number.
+    //
+    // The fallback stays RO only so a profile answered before this question existed keeps scoring
+    // rather than 400ing; `errors` says so, and the interview marks the question required, so a
+    // reader who reaches the end has answered it.
+    country: answeredCountry ?? 'RO',
     age,
     sex: a.SEX === 'M' ? 'M' : 'F',
     smoke: smoke as Profile['smoke'],
@@ -406,7 +448,13 @@ export function isVisible(q: Question, a: Answers): boolean {
 function isAnswered(v: Answers[string]): boolean {
   if (v === undefined || v === '') return false
   if (Array.isArray(v)) return v.length > 0 && v.every((x) => x !== undefined)
-  if (typeof v === 'object') return (v as LocationAnswer).name !== undefined
+  // Two object answers now, and they identify themselves differently: a location by its `name`, a
+  // country by its `iso2` (whose `name` can legitimately be null when the bundle has no display name).
+  // Checking only `name` would have read a chosen country as unanswered.
+  if (typeof v === 'object') {
+    const o = v as Partial<LocationAnswer> & Partial<CountryAnswer>
+    return o.name !== undefined || o.iso2 !== undefined
+  }
   return true
 }
 

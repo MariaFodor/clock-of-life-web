@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useEstimate, useLocations, useSaveAnswers } from '../../api/hooks'
+import { useEstimate, useMeta, usePlaces, useSaveAnswers } from '../../api/hooks'
 import { getClient } from '../../api/client'
 import { useProfile } from '../../app/profile'
 import { PageHeader, Card, ErrorState } from '../../components/ui'
@@ -13,6 +13,7 @@ import {
   isVisible,
   moodScore,
   type Answers,
+  type CountryAnswer,
   type LocationAnswer,
   type Question,
 } from './questionnaire'
@@ -67,42 +68,155 @@ function BatteryField({
   )
 }
 
-/** Q23: pick a location from /api/locations; the answer captures its PM2.5/NDVI at selection time. */
-function LocationField({
+/**
+ * Q0: which country. The first question, and the only one whose answer changes every other number.
+ *
+ * The options come from `/api/meta`, not from a list in this repo: they are exactly the countries the
+ * model can score, so the picker cannot offer one that will be refused at the end.
+ */
+function CountryField({
   value,
   onChange,
 }: {
   value: Answers[string]
   onChange: (v: Answers[string]) => void
 }) {
-  const { data: locations, isLoading, isError } = useLocations()
-  const current = (value as LocationAnswer | undefined)?.name ?? ''
-  if (isLoading) return <p className="text-sm text-clock-muted">Loading locations…</p>
-  if (isError) {
+  const { data: meta, isLoading, isError } = useMeta()
+  const current = (value as CountryAnswer | undefined)?.iso2 ?? ''
+  const options = meta?.country_options ?? []
+
+  if (isLoading) return <p className="text-sm text-clock-muted">Loading countries…</p>
+  if (isError || (meta && options.length === 0)) {
     return (
       <p role="alert" className="text-sm text-clock-bad">
-        We could not load the list of locations, so this question can't be answered right now. Your
-        estimate will be calculated without the air-quality and greenspace term.
+        We could not load the list of countries, so this question can’t be answered right now. Without
+        it the estimate cannot pick the right national life table, and the number would be about
+        somebody else’s country.
       </p>
     )
   }
   return (
     <select
-      className="field max-w-[16rem]"
-      aria-label="Where do you live?"
+      className="field max-w-[18rem]"
+      aria-label="Which country do you live in?"
       value={current}
       onChange={(e) => {
-        const l = locations?.find((x) => x.name === e.target.value)
-        onChange(l ? { name: l.name, country: 'RO', pm25: l.pm25, ndvi: l.ndvi } : undefined)
+        const c = options.find((o) => o.iso2 === e.target.value)
+        onChange(c ? { iso2: c.iso2, iso3: c.iso3, name: c.name } : undefined)
       }}
     >
-      <option value="">Choose your city / area…</option>
-      {(locations ?? []).map((l) => (
-        <option key={l.id} value={l.name}>
-          {l.name}
-        </option>
-      ))}
+      <option value="">Choose your country…</option>
+      {[...options]
+        .sort((a, b) => (a.name ?? a.iso2).localeCompare(b.name ?? b.iso2))
+        .map((o) => (
+          <option key={o.iso2} value={o.iso2}>
+            {o.name ?? o.iso2}
+          </option>
+        ))}
     </select>
+  )
+}
+
+/**
+ * Q23: which settlement, from the ones actually measured IN THE ANSWERED COUNTRY.
+ *
+ * It used to read `/api/locations`, which has no country filter — so it offered every reader the seven
+ * invented Romanian rows, and a German one could pick Bucharest. It now reads `/api/places/{iso3}`,
+ * which cannot return a place outside the country asked for.
+ *
+ * The answer captures the reading AND its provenance at selection time: the year it was taken, and
+ * whether the greenness is this city's own measurement or its country's figure. A stored value without
+ * those is indistinguishable from an invented one the next time somebody asks where it came from.
+ */
+function LocationField({
+  value,
+  onChange,
+  country,
+}: {
+  value: Answers[string]
+  onChange: (v: Answers[string]) => void
+  country?: CountryAnswer
+}) {
+  const { data, isLoading, isError } = usePlaces(country?.iso3 ?? null)
+  const current = (value as LocationAnswer | undefined)?.name ?? ''
+
+  if (!country) {
+    return (
+      <p className="text-sm text-clock-muted">
+        Choose your country first — this list is the settlements measured in it.
+      </p>
+    )
+  }
+  if (isLoading) return <p className="text-sm text-clock-muted">Loading places in {country.name}…</p>
+  if (isError) {
+    // A 404 here is not a failure of ours: 152 of the 237 countries have no measurement since 2020.
+    return (
+      <p className="text-sm text-clock-muted">
+        No settlement in {country.name ?? country.iso2} has had its air measured since 2020, so this
+        question has nothing to offer. Your estimate is calculated without the air and greenspace term
+        rather than with a guessed one.
+      </p>
+    )
+  }
+  const places = data?.places ?? []
+  return (
+    <>
+      <select
+        className="field max-w-[18rem]"
+        aria-label="Which city or town do you live in or nearest to?"
+        value={current}
+        onChange={(e) => {
+          const p = places.find((x) => x.city === e.target.value)
+          onChange(
+            p
+              ? {
+                  name: p.city,
+                  country: country.iso2,
+                  pm25: p.pm25,
+                  ndvi: p.ndvi ?? undefined,
+                  pm25_year: p.pm25_year,
+                  ndvi_basis: p.ndvi_basis,
+                }
+              : undefined,
+          )
+        }}
+      >
+        <option value="">Choose your city or town…</option>
+        {places.map((p) => (
+          <option key={p.city} value={p.city}>
+            {p.city} — {p.pm25.toFixed(1)} µg/m³ ({p.pm25_year})
+          </option>
+        ))}
+      </select>
+      {current && (
+        <p className="mt-2 text-xs leading-relaxed text-clock-muted">
+          {(() => {
+            const p = places.find((x) => x.city === current)
+            if (!p) return null
+            const ref = data?.reference?.pm25 ?? null
+            return (
+              <>
+                Air measured in {p.city} in {p.pm25_year}
+                {ref !== null && (
+                  <>
+                    , {Math.abs(p.pm25 - ref) < 0.05
+                      ? 'the same as'
+                      : `${Math.abs(p.pm25 - ref).toFixed(1)} µg/m³ ${p.pm25 > ref ? 'above' : 'below'}`}{' '}
+                    the national average of {ref.toFixed(1)}
+                  </>
+                )}
+                .{' '}
+                {p.ndvi === null
+                  ? 'No greenness figure exists for anywhere in this country, so greenspace is not scored.'
+                  : p.ndvi_basis === 'city'
+                    ? `Greenness ${p.ndvi.toFixed(2)}, measured in ${p.city} itself.`
+                    : `Greenness ${p.ndvi.toFixed(2)} — that is ${data?.name ?? 'the country'}’s figure, not ${p.city}’s: nobody has measured greenness here.`}
+              </>
+            )
+          })()}
+        </p>
+      )}
+    </>
   )
 }
 
@@ -110,10 +224,13 @@ function Field({
   q,
   value,
   onChange,
+  country,
 }: {
   q: Question
   value: Answers[string]
   onChange: (v: Answers[string]) => void
+  /** The answer to Q0, threaded down because the city list is a list of places IN that country. */
+  country?: CountryAnswer
 }) {
   if (q.type === 'number') {
     return (
@@ -129,8 +246,11 @@ function Field({
   if (q.type === 'battery') {
     return <BatteryField q={q} value={value} onChange={onChange} />
   }
+  if (q.type === 'country') {
+    return <CountryField value={value} onChange={onChange} />
+  }
   if (q.type === 'location') {
-    return <LocationField value={value} onChange={onChange} />
+    return <LocationField value={value} onChange={onChange} country={country} />
   }
   if (q.type === 'radio') {
     return (
@@ -277,7 +397,12 @@ export function InterviewPage() {
                         </span>
                       )}
                     </div>
-                    <Field q={q} value={answers[q.code]} onChange={set(q.code)} />
+                    <Field
+                      q={q}
+                      value={answers[q.code]}
+                      onChange={set(q.code)}
+                      country={answers.COUNTRY as CountryAnswer | undefined}
+                    />
                   </div>
                 ))}
             </div>
