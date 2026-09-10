@@ -57,17 +57,29 @@ function depths(ontology: Ontology): Record<string, number> {
 
 interface Node { key: string; x: number; y: number; col: number }
 
-export function CausalGraph({ ontology }: { ontology: Ontology }) {
+/**
+ * @param impact  the reader's OWN years-at-stake per factor, from why[]. Optional: the graph is
+ *   still a truthful drawing of the model without it. With it, it stops being a diagram of the
+ *   model and becomes a picture of this person — which is the only reason they are looking at it.
+ *   A generic diagram answers "how does the model work"; nobody asked that. They asked why their
+ *   number is what it is, and the answer is which of these roads THEIR factors are travelling.
+ */
+export function CausalGraph({ ontology, impact = {} }:
+                            { ontology: Ontology; impact?: Record<string, number> }) {
   const [focus, setFocus] = useState<string | null>(null)
+  const maxImpact = Math.max(0, ...Object.values(impact).map(Math.abs))
 
   const { nodes, edges, width, height } = useMemo(() => {
     const depth = depths(ontology)
     const maxDepth = Math.max(0, ...Object.values(depth))
     const byCol: string[][] = Array.from({ length: maxDepth + 1 }, () => [])
     Object.keys(ontology).forEach((k) => byCol[depth[k]].push(k))
-    // Inside a column, group by role so colour still reads as a band.
+    // Inside a column, the reader's own biggest factors come first — the eye lands at the top of a
+    // column, and what belongs there is what is actually costing them years, not an alphabet. Role
+    // breaks ties, so colour still reads as a band among the factors they are level on.
     const ORDER = ['baseline', 'context', 'lever', 'manage', 'marker']
     byCol.forEach((col) => col.sort((a, b) =>
+      Math.abs(impact[b] ?? 0) - Math.abs(impact[a] ?? 0) ||
       ORDER.indexOf(ontology[a].role) - ORDER.indexOf(ontology[b].role) || a.localeCompare(b)))
 
     const colW = 178
@@ -86,7 +98,7 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
       (spec.causes ?? []).filter((to) => posLocal[from] && posLocal[to]).map((to) => ({ from, to })),
     )
     return { nodes, edges, width, height }
-  }, [ontology])
+  }, [ontology, impact])
 
   const pos = Object.fromEntries(nodes.map((n) => [n.key, n]))
   /** A node is lit when it is the focus or a direct neighbour of it. */
@@ -170,6 +182,13 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
             const spec = ontology[n.key]
             const on = lit(n.key)
             const isFocus = focus === n.key
+            const years = impact[n.key]
+            // The reader's own stake in this factor, as a share of their largest. Drawn as a bar
+            // INSIDE the node rather than by resizing the node, because a graph whose boxes change
+            // size also changes shape, and the shape is a claim about causality that has nothing to
+            // do with this person's numbers.
+            const share = years && maxImpact > 0 ? Math.abs(years) / maxImpact : 0
+            const label = LABELS[n.key] ?? n.key
             return (
               <g
                 key={n.key}
@@ -179,7 +198,10 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
                 onBlur={() => setFocus(null)}
                 onClick={() => setFocus(focus === n.key ? null : n.key)}
                 tabIndex={0}
-                aria-label={`${LABELS[n.key] ?? n.key}: ${spec.role}`}
+                aria-label={years === undefined
+                  ? `${label}: ${spec.role}`
+                  : `${label}: ${spec.role}, ${years > 0 ? 'worth you' : 'costing you'} ` +
+                    `${Math.abs(years).toFixed(1)} years`}
                 className="cursor-pointer"
                 opacity={on ? 1 : 0.18}
               >
@@ -192,9 +214,26 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
                   }
                   strokeWidth={1}
                 />
-                <text x={n.x + 4} y={n.y + 4} className="fill-clock-ink text-[11px]">
-                  {LABELS[n.key] ?? n.key}
+                {share > 0 && (
+                  <rect
+                    // y+7, height 3: the node box runs to y+11 and the label's descender box to
+                    // y+3.2, so this sits clear of both instead of grazing the text by a fraction.
+                    x={n.x - 6} y={n.y + 7} rx={1.5} width={150 * share} height={3}
+                    className={years! < 0 ? 'fill-clock-bad' : 'fill-clock-good'}
+                    // Not announced separately: the group's aria-label already says the number, and
+                    // a screen reader does not need the bar read out as well as its own caption.
+                    aria-hidden="true"
+                  />
+                )}
+                <text x={n.x + 4} y={n.y + 3} className="fill-clock-ink text-[11px]">
+                  {label}
                 </text>
+                {years !== undefined && (
+                  <text x={n.x + 138} y={n.y + 3} textAnchor="end"
+                        className={`text-[10px] ${years < 0 ? 'fill-clock-bad' : 'fill-clock-good'}`}>
+                    {years > 0 ? '+' : '−'}{Math.abs(years).toFixed(1)}
+                  </text>
+                )}
               </g>
             )
           })}
@@ -202,6 +241,11 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
       </div>
 
       <p className="mt-2 text-xs text-clock-muted">
+        {maxImpact > 0 && (
+          <>
+            The bars are <em>your</em> years: how much each factor is worth to you, biggest first.{' '}
+          </>
+        )}
         Hover a factor to see what it acts through. Arrows are causal claims the model is built on —
         each one decides what the estimate may adjust for, which is what keeps “losing weight helps”
         from being cancelled out by the diabetes that losing weight would also improve.
@@ -214,6 +258,12 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
         <div className="rounded-lg border border-clock-line bg-clock-canvas p-3">
           <strong className="text-clock-ink">{LABELS[focus] ?? focus}</strong>{' '}
           <span className="text-clock-muted">· {ontology[focus].role}</span>
+          {impact[focus] !== undefined && (
+            <span className={impact[focus]! < 0 ? 'text-clock-bad' : 'text-clock-good'}>
+              {' '}· {impact[focus]! < 0 ? 'costing you' : 'worth you'}{' '}
+              {Math.abs(impact[focus]!).toFixed(1)} years
+            </span>
+          )}
           {(ontology[focus].causes ?? []).length > 0 && (
             <p className="mt-1 text-clock-muted">
               Acts through: {(ontology[focus].causes ?? []).map((c) => LABELS[c] ?? c).join(', ')}

@@ -78,7 +78,8 @@ const round1 = (x: number) => Math.round(x * 10) / 10
 /** Server /api/estimate response — Estimate fields plus why/model/calculation_id. */
 interface EstimateEnvelope extends Estimate {
   why: Array<{
-    factor: string; delta_years: number; evidence: string; role: string; citation: string
+    key: string; factor: string; delta_years: number; evidence: string; role: string
+    citation: string
     url?: string; doi?: string; first_author?: string; year?: number
   }>
 }
@@ -120,6 +121,9 @@ export function createHttpClient(): ApiClient {
     whyCache.set(
       keyOf(profile),
       env.why.map((w) => ({
+        // The service has always sent this; the client dropped it on the floor, so no page could
+        // join a breakdown row back to the ontology except by its display label.
+        key: w.key,
         factor: w.factor,
         delta_years: w.delta_years,
         evidence: asGrade(w.evidence),

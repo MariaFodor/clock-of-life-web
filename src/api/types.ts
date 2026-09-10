@@ -146,6 +146,12 @@ export type FactorRole = 'lever' | 'manage' | 'context' | 'baseline'
 
 /** One row of the "Why?" breakdown (api-and-scoring.md `why[]`, extended with role for framing). */
 export interface Attribution {
+  /** The feature/design key (e.g. `smk_current`), which is how this row maps back to the ontology,
+   *  the features table and the recommendation rules. The service has always sent it; the type and
+   *  the mock both omitted it, so anything wanting to join a breakdown row to the model had only
+   *  the display label to go on — which is how ImprovePage once matched on labels and rendered zero
+   *  links. */
+  key: string
   factor: string
   delta_years: number
   evidence: EvidenceGrade
