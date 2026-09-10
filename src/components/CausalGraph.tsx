@@ -5,7 +5,7 @@
 // waist acts THROUGH diabetes and blood pressure, so once we know those, it adds little on its own.
 // Showing the arrows makes that visible instead of asking people to take it on trust.
 
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useState } from 'react'
 import type { Ontology } from '../api/types'
 import { ArticleLink } from './ArticleLink'
 
@@ -63,10 +63,26 @@ interface Node { key: string; x: number; y: number; col: number }
  *   model and becomes a picture of this person — which is the only reason they are looking at it.
  *   A generic diagram answers "how does the model work"; nobody asked that. They asked why their
  *   number is what it is, and the answer is which of these roads THEIR factors are travelling.
+ * @param initialFocus  a factor to open focused on, instead of the resting state that draws all ~40
+ *   edges at once. Read once per mount: Why? mounts this graph when the reader opens the disclosure,
+ *   so every open starts on one factor's paths with the rest dimmed. It adds no interaction —
+ *   hovering, clicking and clearing behave exactly as before, including clicking the focused node to
+ *   go back to the resting state. A key with no node in `ontology` is ignored, because focusing a
+ *   node that is not drawn dims every node and shows no detail card.
  */
-export function CausalGraph({ ontology, impact = {} }:
-                            { ontology: Ontology; impact?: Record<string, number> }) {
+export function CausalGraph({ ontology, impact = {}, initialFocus = null }:
+                            { ontology: Ontology; impact?: Record<string, number>;
+                              initialFocus?: string | null }) {
   const [focus, setFocus] = useState<string | null>(null)
+
+  // Applied after the first commit rather than as the initial state, because the live region at the
+  // bottom has to mount EMPTY — a live region inserted together with its text is routinely missed by
+  // screen readers (the comment on that region says the same thing, and a test pins it). This runs
+  // before the browser paints, so the reader never sees the unfocused state either. Mount-only on
+  // purpose: an `impact` arriving later must not pull the focus off whatever the reader is on.
+  useLayoutEffect(() => {
+    if (initialFocus && ontology[initialFocus]) setFocus(initialFocus)
+  }, [])
   const maxImpact = Math.max(0, ...Object.values(impact).map(Math.abs))
 
   const { nodes, edges, width, height } = useMemo(() => {
