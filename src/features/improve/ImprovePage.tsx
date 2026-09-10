@@ -7,6 +7,7 @@ import { useOntology } from '../../api/hooks'
 import type { Ontology } from '../../api/types'
 import { PageHeader, Card, NeedsProfile, Loading, ErrorState } from '../../components/ui'
 import { fmtDelta } from '../../components/format'
+import { roleLabel } from '../../components/roles'
 
 /** The article behind a recommendation, looked up by the feature key the service returns. */
 function factorLink(ontology: Ontology | undefined, factor: string) {
@@ -18,7 +19,13 @@ function factorLink(ontology: Ontology | undefined, factor: string) {
   )
 }
 
-const DIFFICULTY_LABEL = { 1: 'easier', 2: 'moderate', 3: 'harder' } as const
+// A difficulty chip used to sit next to the evidence one, reading a bare "moderate" with nothing to
+// say what was moderate about it. It is not shown any more, and the reason is not the missing label:
+// the service does not send a difficulty at all, so `httpClient` fills in 2 for every recommendation
+// it maps. A chip that reads "moderate" for everything is not information about this recommendation,
+// and labelling it "effort: moderate" would only have made a constant sound like a finding. The
+// field itself stays — the mock ranks with it — and the display can come back the day the service
+// has something to put in it.
 
 export function ImprovePage() {
   const { profile } = useProfile()
@@ -62,15 +69,17 @@ export function ImprovePage() {
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-semibold text-clock-ink">{rec.headline}</h3>
+                    {/* The model's own word for the role ("lever") meant nothing to a reader who
+                        had never been told it. Why? already says these in plain words; this is the
+                        same mapping, so the two surfaces cannot describe one factor differently. */}
                     <span className="rounded bg-clock-canvas px-1.5 py-0.5 text-[11px] text-clock-muted">
-                      {rec.role === 'manage' ? 'manage' : 'lever'}
+                      {roleLabel(rec.role)}
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-clock-muted">{rec.detail}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
                     <span className="font-medium text-clock-good">up to {fmtDelta(rec.potential_years)}</span>
                     <EvidenceChip grade={rec.evidence} />
-                    <span className="text-[11px] text-clock-muted">{DIFFICULTY_LABEL[rec.difficulty]}</span>
                     {/* The advice and the paper it rests on, side by side — a recommendation the
                         reader cannot check is just an assertion. */}
                     {factorLink(ontology.data, rec.factor)}

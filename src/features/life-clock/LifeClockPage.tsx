@@ -1,16 +1,19 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useProfile } from '../../app/profile'
-import { useBenchmark } from '../../api/hooks'
+import { useBenchmark, useMeta } from '../../api/hooks'
 import { LifeClock } from '../../components/LifeClock'
 import { Benchmark } from '../../components/Benchmark'
 import { IntervalBadge, StatisticalEstimateNote, SafeguardNote } from '../../components/framing'
 import { PageHeader, Card, NeedsProfile, NoticeState } from '../../components/ui'
-import { fmtYears } from '../../components/format'
+import { fmtYears, riskVsAverage } from '../../components/format'
 
 export function LifeClockPage() {
   const { profile, estimate } = useProfile()
   const benchmark = useBenchmark(profile)
+  // Only for the country's NAME. A profile stores the two-letter code, and the name travels with the
+  // country list, exactly as the relocate surface resolves it.
+  const meta = useMeta()
   // A notice handed over by the interview (e.g. the home location could not be saved). Read once,
   // then cleared from history so a refresh or a back-navigation doesn't resurrect it.
   const routerLocation = useLocation()
@@ -37,6 +40,22 @@ export function LifeClockPage() {
   }
 
   const belowCurrentAge = estimate.reaches_age <= profile.age
+
+  // "Relative risk 0.56×" is a statistic wearing a label only a statistician reads, and its only
+  // explanation was a hover title — which a touch reader never sees at all. The number stays, since
+  // it is the model's own, and the sentence beneath says what it means.
+  const risk = riskVsAverage(estimate.relative_risk)
+  // Never a bare country code in a sentence a person reads: the profile stores "RO", and "the
+  // average person in RO" is the jargon this page is being cleaned of. The code is the fallback
+  // rather than a guess, because a service too old to send the country list still has to produce a
+  // sentence — and for the moment the list is in flight, the code is what is true.
+  const countryName =
+    meta.data?.country_options?.find((c) => c.iso2 === estimate.country)?.name ?? estimate.country
+  // "Compared with X, your risk is …" rather than "your risk is … than X": the second compares a
+  // risk to a person, which is the kind of sentence that makes a reader re-read a number.
+  const riskSentence =
+    `Compared with the average person in ${countryName}, your yearly risk of dying is about ` +
+    (risk.direction === 'same' ? 'the same.' : `${risk.percent}% ${risk.direction}.`)
 
   return (
     <div>
@@ -75,15 +94,16 @@ export function LifeClockPage() {
               <dd className="font-medium text-clock-ink">age {estimate.reaches_age.toFixed(0)}</dd>
             </div>
             <div>
-              <dt className="text-clock-muted">Relative risk</dt>
-              <dd className="font-medium text-clock-ink" title="vs the country's average person (1.0)">
-                {estimate.relative_risk.toFixed(2)}×
-              </dd>
+              <dt className="text-clock-muted">Yearly risk vs the average</dt>
+              <dd className="font-medium text-clock-ink">{estimate.relative_risk.toFixed(2)}×</dd>
             </div>
           </dl>
+          {/* The comparison the figure above is against, said once and in full. It used to be a
+              second sentence in the note below ("Centred on the average person in RO"), which named
+              neither what was being compared nor the country. */}
+          <p className="text-sm text-clock-ink">{riskSentence}</p>
           <StatisticalEstimateNote>
-            Centred on the average person in {estimate.country}. This is a statistical estimate, not a
-            prediction or diagnosis.
+            This is a statistical estimate, not a prediction or diagnosis.
           </StatisticalEstimateNote>
         </Card>
       </div>
@@ -96,6 +116,14 @@ export function LifeClockPage() {
             nationalAvgYears={benchmark.data.national_avg_years}
             deltaYears={benchmark.data.delta_years}
           />
+          {/* Two comparisons sit on this page, both calling their yardstick "the average person",
+              and a reader cannot tell whether they mean the same thing or why a large difference in
+              risk goes with a small difference in years. Saying which people, and which quantity,
+              is what stops them being read as one statement. */}
+          <p className="mt-2 text-xs text-clock-muted">
+            “Average” here means someone your age and sex in {countryName}. This compares years of
+            life left; the risk figure above compares the chance of dying in a year.
+          </p>
         </Card>
       )}
 

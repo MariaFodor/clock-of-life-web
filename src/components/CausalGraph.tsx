@@ -8,6 +8,7 @@
 import { useLayoutEffect, useMemo, useState } from 'react'
 import type { Ontology } from '../api/types'
 import { ArticleLink } from './ArticleLink'
+import { roleLabel } from './roles'
 
 /** Role decides COLOUR, never position — position is computed from the graph itself (see below). */
 const ROLE_STYLE: Record<string, string> = {
@@ -214,9 +215,12 @@ export function CausalGraph({ ontology, impact = {}, initialFocus = null }:
                 onBlur={() => setFocus(null)}
                 onClick={() => setFocus(focus === n.key ? null : n.key)}
                 tabIndex={0}
+                // The role in the reader's words, not the model's. A node announcing itself as
+                // "Waist: lever" hands a screen-reader user a token that appears nowhere in the
+                // vocabulary the rest of the page taught them.
                 aria-label={years === undefined
-                  ? `${label}: ${spec.role}`
-                  : `${label}: ${spec.role}, ${years > 0 ? 'worth you' : 'costing you'} ` +
+                  ? `${label}: ${roleLabel(spec.role)}`
+                  : `${label}: ${roleLabel(spec.role)}, ${years > 0 ? 'worth you' : 'costing you'} ` +
                     `${Math.abs(years).toFixed(1)} years`}
                 className="cursor-pointer"
                 opacity={on ? 1 : 0.18}
@@ -273,7 +277,7 @@ export function CausalGraph({ ontology, impact = {}, initialFocus = null }:
         {focus && ontology[focus] && (
         <div className="rounded-lg border border-clock-line bg-clock-canvas p-3">
           <strong className="text-clock-ink">{LABELS[focus] ?? focus}</strong>{' '}
-          <span className="text-clock-muted">· {ontology[focus].role}</span>
+          <span className="text-clock-muted">· {roleLabel(ontology[focus].role)}</span>
           {impact[focus] !== undefined && (
             <span className={impact[focus]! < 0 ? 'text-clock-bad' : 'text-clock-good'}>
               {' '}· {impact[focus]! < 0 ? 'costing you' : 'worth you'}{' '}
