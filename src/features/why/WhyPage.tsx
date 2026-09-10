@@ -6,16 +6,9 @@ import { EvidenceChip, StatisticalEstimateNote } from '../../components/framing'
 import { PageHeader, Card, NeedsProfile, Loading, ErrorState } from '../../components/ui'
 import { ArticleLink } from '../../components/ArticleLink'
 import { CausalGraph } from '../../components/CausalGraph'
+import { roleLabel } from '../../components/roles'
 import { useOntology } from '../../api/hooks'
 import type { Ontology } from '../../api/types'
-
-const ROLE_LABEL: Record<string, string> = {
-  lever: 'you can change this',
-  manage: 'manage the condition',
-  context: 'context — explained, not a target',
-  marker: 'a sign, not a cause — explained, never recommended',
-  baseline: 'baseline',
-}
 
 /** Said in two places — the page while the breakdown loads, and the graph panel when it is opened
  *  in that window. One string, so the two can never drift into telling the reader different things. */
@@ -86,7 +79,7 @@ export function WhyPage() {
                       <FactorBar label={a.factor} deltaYears={a.delta_years} max={max} />
                       <div className="ml-[10.75rem] mt-1 flex flex-wrap items-center gap-2">
                         <EvidenceChip grade={a.evidence} />
-                        <span className="text-[11px] text-clock-muted">{ROLE_LABEL[a.role] ?? a.role}</span>
+                        <span className="text-[11px] text-clock-muted">{roleLabel(a.role)}</span>
                         <span className="text-[11px] text-clock-muted">·</span>
                         <ArticleLink url={a.url} doi={a.doi} firstAuthor={a.first_author}
                                      year={a.year} citation={a.citation} />

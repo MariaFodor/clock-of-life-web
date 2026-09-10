@@ -60,8 +60,11 @@ export function ProgressPage() {
                 <div>
                   <div className="text-sm font-medium text-clock-ink">{fmtYears(row.estimate_years)}</div>
                   <div className="text-xs text-clock-muted">
-                    {fmtDate(row.created_at)} · reaches age {row.reaches_age.toFixed(0)} · RR{' '}
-                    {row.relative_risk.toFixed(2)}×
+                    {/* "RR" is the model's shorthand for a comparison, and a history row is no
+                        place to learn it. Short enough for a compact row, spelled out enough to
+                        read: the same figure the Life Clock explains in full. */}
+                    {fmtDate(row.created_at)} · reaches age {row.reaches_age.toFixed(0)} · risk vs
+                    average {row.relative_risk.toFixed(2)}×
                   </div>
                 </div>
                 <IntervalBadge low={row.interval_low} high={row.interval_high} />

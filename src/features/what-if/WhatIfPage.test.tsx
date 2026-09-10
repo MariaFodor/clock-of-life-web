@@ -42,7 +42,7 @@ describe('<WhatIfPage/>', () => {
 
   it('exposes only the modifiable levers as controls', () => {
     renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
-    expect(screen.getByRole('slider', { name: /active minutes/i })).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: /activity per week/i })).toBeInTheDocument()
     expect(screen.getByRole('slider', { name: /waist/i })).toBeInTheDocument()
     // SAMPLE_PROFILE smokes, so the dose is a lever for this person.
     expect(screen.getByRole('slider', { name: /cigarettes per day/i })).toBeInTheDocument()
@@ -287,6 +287,126 @@ describe('<WhatIfPage/>', () => {
 
     await user.click(screen.getByRole('button', { name: /see the effect/i }))
     expect(await screen.findByText(/no longer a What-If lever/i)).toBeInTheDocument()
+  })
+
+  // UX-4: the interview asks for days and minutes, and this page then asked for MET-minutes with no
+  // bridge — a unit the reader met for the first time at the moment they were asked to move it.
+  describe('the activity lever in a reader s units', () => {
+    it('names the lever plainly and defines its unit once, under the label', () => {
+      renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+      expect(screen.getByRole('slider', { name: /activity per week/i })).toBeInTheDocument()
+      expect(screen.getByText(/brisk walking is about 4 per minute/i)).toBeInTheDocument()
+    })
+
+    it('shows the model s number and what it is worth in walking', () => {
+      renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+      // 400 MET-minutes ÷ 4 per minute = 100 minutes of brisk walking.
+      expect(screen.getByText(/400 MET-minutes/))
+        .toHaveTextContent(/roughly 100 minutes of brisk walking/)
+    })
+
+    it('keeps the value the model scores while the words change with it', () => {
+      renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+      const activity = screen.getByRole('slider', { name: /activity per week/i })
+      fireEvent.change(activity, { target: { value: '1000' } })
+      // The number sent to the service is untouched — converting it here would price a scenario
+      // the reader never asked for.
+      expect(activity).toHaveValue('1000')
+      expect(screen.getByText(/1000 MET-minutes/))
+        .toHaveTextContent(/roughly 250 minutes of brisk walking/)
+    })
+
+    it('rounds the walking equivalent coarsely, because it is a bridge and not a measurement', () => {
+      renderWithProviders(<WhatIfPage />, { profile: { ...SAMPLE_PROFILE, pa_min: 444 } })
+      // 444 ÷ 4 = 111 minutes, shown as 110.
+      expect(screen.getByText(/444 MET-minutes/))
+        .toHaveTextContent(/roughly 110 minutes of brisk walking/)
+    })
+
+    it('drops the bridge when there is no walking to describe', () => {
+      renderWithProviders(<WhatIfPage />, { profile: { ...SAMPLE_PROFILE, pa_min: 0 } })
+      expect(screen.getByText('0 MET-minutes')).toBeInTheDocument()
+      expect(screen.queryByText(/minutes of brisk walking/)).toBeNull()
+    })
+  })
+
+  // UX-4: the row's three numbers were rounded independently, so they could contradict each other
+  // in front of the reader: "now 40.7 / change +0.1 / changed 40.7".
+  describe('a result row that cannot argue with itself', () => {
+    /** A client that answers every scenario with one fixed result, contradictions included. */
+    const answering = (result: { current_years: number; scenario_years: number; delta_years: number }) => {
+      const client = createMockClient()
+      client.whatif = async () => result
+      return client
+    }
+    const seeTheEffect = async () => {
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: /see the effect/i }))
+    }
+
+    it('never prints a change the two years beside it do not support', async () => {
+      renderWithProviders(<WhatIfPage />, {
+        profile: SAMPLE_PROFILE,
+        // What the wire can actually carry for a scenario that moved 40.68 → 40.74. The service
+        // rounds current, scenario and delta each on its own, so the two endpoints arrive equal
+        // while the delta field still claims a tenth.
+        client: answering({ current_years: 40.7, scenario_years: 40.7, delta_years: 0.1 }),
+      })
+      await seeTheEffect()
+      // Both endpoints show 40.7, and 40.7 to 40.7 is not "+0.1 yr" to anyone who can subtract.
+      expect(await screen.findByText('±0.0 yr')).toBeInTheDocument()
+      expect(screen.queryByText('+0.1 yr')).toBeNull()
+      expect(screen.getAllByText('40.7 yr')).toHaveLength(2)
+      // And it is not hedged in words either. Saying "it moved, but by less than 0.1 yr" would
+      // mean believing the delta field over both endpoints, and this payload is exactly what a
+      // scenario that moved NOTHING also looks like once the service has rounded it. The client
+      // cannot tell the two apart, so it does not pretend to.
+      expect(screen.queryByText(/less than 0\.1/i)).toBeNull()
+    })
+
+    it('still says nothing changed when nothing did', async () => {
+      renderWithProviders(<WhatIfPage />, {
+        profile: SAMPLE_PROFILE,
+        client: answering({ current_years: 40.7, scenario_years: 40.7, delta_years: 0 }),
+      })
+      await seeTheEffect()
+      expect(await screen.findByText('±0.0 yr')).toBeInTheDocument()
+      expect(screen.queryByText(/less than 0\.1/i)).toBeNull()
+    })
+
+    it('derives the change from the years it prints, not from the answer s own rounding', async () => {
+      renderWithProviders(<WhatIfPage />, {
+        profile: SAMPLE_PROFILE,
+        client: answering({ current_years: 40.0, scenario_years: 41.0, delta_years: 0.94 }),
+      })
+      await seeTheEffect()
+      // 41.0 − 40.0 is what the row shows, so it is what the row must say.
+      expect(await screen.findByText('+1.0 yr')).toBeInTheDocument()
+      expect(screen.queryByText('+0.9 yr')).toBeNull()
+    })
+
+    // The card was fixed to derive its change from the two years it prints; the saved rows and the
+    // "best" badge kept reading the delta field. That put two contradictory descriptions of ONE
+    // scenario on screen at the same time, a few centimetres apart.
+    it('gives the card, the saved row and the badge one answer for one scenario', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<WhatIfPage />, {
+        profile: SAMPLE_PROFILE,
+        // Endpoints a tenth apart, with a delta that rounded the other way — reachable, because
+        // the service rounds all three fields independently.
+        client: answering({ current_years: 40.0, scenario_years: 40.1, delta_years: 0.0 }),
+      })
+      await user.click(screen.getByRole('button', { name: 'Never' }))
+      await user.click(screen.getByRole('button', { name: /see the effect/i }))
+      await user.click(await screen.findByRole('button', { name: /save to compare/i }))
+
+      // The card said "+0.1 yr" and the saved row said "±0.0 yr" about the same saved scenario.
+      expect(screen.getAllByText('+0.1 yr')).toHaveLength(2)
+      expect(screen.queryByText('±0.0 yr')).toBeNull()
+      // The badge ranked on the delta field, which is 0.0 here — so the only gain on the board,
+      // shown to the reader as "+0.1 yr", went unbadged by a rule they could not see.
+      expect(screen.getByText(/smoking → Never/i).closest('tr')).toHaveTextContent('best')
+    })
   })
 
   it('prices cutting down below quitting, and says cutting down is not quitting', async () => {

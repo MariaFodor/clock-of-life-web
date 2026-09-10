@@ -73,7 +73,7 @@ describe('<CausalGraph/>', () => {
 
   it('isolates one factor s path on hover, and says what it acts through', () => {
     const { container } = render(<CausalGraph ontology={ONTOLOGY} />)
-    const waist = screen.getByLabelText('Waist: lever')
+    const waist = screen.getByLabelText('Waist: you can change this')
     fireEvent.mouseEnter(waist)
 
     // Only edges TOUCHING the focus light up. Lighting every edge between two neighbours of the
@@ -117,9 +117,9 @@ describe('<CausalGraph/>', () => {
       const barOf = (aria: string) =>                                               // three they
         Number(screen.getByLabelText(aria)                                          // deviate on
           .querySelector('rect[aria-hidden="true"]')!.getAttribute('width'))
-      expect(barOf('Waist: lever, costing you 1.2 years')).toBeCloseTo(150, 5)
-      expect(barOf('Diet: lever, costing you 0.4 years')).toBeCloseTo(150 * (0.4 / 1.2), 5)
-      expect(barOf('Activity: lever, worth you 0.3 years')).toBeCloseTo(150 * (0.3 / 1.2), 5)
+      expect(barOf('Waist: you can change this, costing you 1.2 years')).toBeCloseTo(150, 5)
+      expect(barOf('Diet: you can change this, costing you 0.4 years')).toBeCloseTo(150 * (0.4 / 1.2), 5)
+      expect(barOf('Activity: you can change this, worth you 0.3 years')).toBeCloseTo(150 * (0.3 / 1.2), 5)
     })
 
     it('puts the reader s biggest factors where the eye lands', () => {
@@ -141,17 +141,32 @@ describe('<CausalGraph/>', () => {
 
     it('tells a screen reader the number, not just that a bar is there', () => {
       render(<CausalGraph ontology={ONTOLOGY} impact={IMPACT} />)
-      expect(screen.getByLabelText('Waist: lever, costing you 1.2 years')).toBeInTheDocument()
-      expect(screen.getByLabelText('Activity: lever, worth you 0.3 years')).toBeInTheDocument()
+      expect(screen.getByLabelText('Waist: you can change this, costing you 1.2 years')).toBeInTheDocument()
+      expect(screen.getByLabelText('Activity: you can change this, worth you 0.3 years')).toBeInTheDocument()
       // A factor they sit at the average on says nothing about years at all.
-      expect(screen.getByLabelText('Long sleep: marker')).toBeInTheDocument()
+      expect(screen.getByLabelText(
+        'Long sleep: a sign, not a cause — explained, never recommended')).toBeInTheDocument()
+    })
+
+    // The role reaches a screen reader through the node's name and a sighted reader through the
+    // detail card, and both used to hand over the model's own token: "Waist: lever", "· lever".
+    // The word appears nowhere else in the vocabulary this page teaches, and the two channels are
+    // now fed by one mapping, so neither can drift back on its own.
+    it('says what a role means, in both places it is announced', () => {
+      const { container } = render(<CausalGraph ontology={ONTOLOGY} impact={IMPACT} />)
+      fireEvent.mouseEnter(screen.getByLabelText('Waist: you can change this, costing you 1.2 years'))
+
+      const status = container.querySelector('[role="status"]')!
+      expect(status).toHaveTextContent('you can change this')
+      expect(status).not.toHaveTextContent(/· lever/)
+      expect(screen.queryByLabelText(/: lever/)).toBeNull()
     })
 
     it('is still a truthful drawing with no numbers at all', () => {
       const { container } = render(<CausalGraph ontology={ONTOLOGY} />)
       expect(container.querySelectorAll('rect[aria-hidden="true"]')).toHaveLength(0)
       expect(container.querySelectorAll('path[marker-end]')).toHaveLength(5)
-      expect(screen.getByLabelText('Waist: lever')).toBeInTheDocument()
+      expect(screen.getByLabelText('Waist: you can change this')).toBeInTheDocument()
     })
   })
 
@@ -167,7 +182,7 @@ describe('<CausalGraph/>', () => {
       expect(lit).toHaveLength(4) // the same 4 of 5 that hovering waist lights
       expect(container.querySelector('[role="status"]')).toHaveTextContent('Acts through: Diabetes, Hypertension')
       // Focused, not merely lit: the node itself has to read as the one being asked about.
-      expect(screen.getByLabelText('Waist: lever').querySelector('rect')?.getAttribute('class'))
+      expect(screen.getByLabelText('Waist: you can change this').querySelector('rect')?.getAttribute('class'))
         .toContain('fill-clock-brandsoft')
     })
 

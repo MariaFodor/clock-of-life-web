@@ -5,9 +5,27 @@ import { effectiveCigsDay } from '../../api/modelRules'
 import type { SmokeStatus, WhatIf, WhatIfChanges } from '../../api/types'
 import { PageHeader, Card, NeedsProfile, ErrorState } from '../../components/ui'
 import { StatisticalEstimateNote } from '../../components/framing'
-import { fmtDelta, fmtYears, deltaTone } from '../../components/format'
+import { fmtDelta, fmtYears, deltaTone, shownYears } from '../../components/format'
 
 const SMOKE_LABEL: Record<SmokeStatus, string> = { 0: 'Never', 1: 'Former', 2: 'Current' }
+
+/**
+ * Brisk walking, in MET-minutes per minute walked — the bridge between the unit the model scores and
+ * the unit the interview asked in (days × minutes).
+ *
+ * MET stands for metabolic equivalent of task: how hard an activity is, as a multiple of sitting
+ * still. Brisk walking is about 4, so a minute of it earns about 4 MET-minutes.
+ */
+const BRISK_WALK_METS = 4
+
+/**
+ * The same weekly effort as minutes of brisk walking, to the nearest 5 minutes.
+ *
+ * Rounded coarsely on purpose: this is a bridge between two units, not a measurement, and "111
+ * minutes" would claim a precision the conversion does not have.
+ */
+const walkingMinutes = (metMinutes: number): number =>
+  Math.round(metMinutes / BRISK_WALK_METS / 5) * 5
 
 interface SavedScenario {
   id: number
@@ -15,11 +33,57 @@ interface SavedScenario {
   result: WhatIf
 }
 
+interface ResultRow {
+  now: string
+  after: string
+  /** The change, derived from the two figures above rather than rounded on its own. */
+  change: string
+  tone: 'good' | 'bad' | 'neutral'
+}
+
+/**
+ * The one change a scenario is described by, wherever this page describes it: the difference
+ * between its two year figures AS SHOWN.
+ *
+ * Rounding the change independently of the two endpoints let the card read "now 40.7 / change +0.1
+ * / changed 40.7", and a reader is right to disbelieve that: 40.7 and 40.7 do not differ by 0.1.
+ * The difference between the two printed numbers is the only arithmetic a reader can check, so it
+ * is what the card, the saved rows and the "best" badge are all computed from. One function,
+ * because the defect was never the formula — it was having more than one of them on a screen.
+ *
+ * The limitation this rule inherits, stated rather than papered over: the service rounds
+ * current_years, scenario_years AND delta_years each on its own before any of them reach us
+ * (clock-of-life-service `round1`), so every field on the wire is already a multiple of 0.1 and the
+ * delta is not the difference between the two numbers we print. A real change smaller than half a
+ * tenth therefore arrives indistinguishable from no change at all — 40.68 → 40.74 is sent as
+ * current 40.7, scenario 40.7, delta 0.1, and nothing in that payload separates it from a scenario
+ * that moved nothing. The client CANNOT honestly say "it moved, but by less than 0.1 yr"; saying so
+ * would mean trusting a delta that disagrees with both endpoints. Telling those two cases apart
+ * needs the service to send an unrounded delta or an explicit direction — registered as a service
+ * follow-up, not promised here.
+ */
+function shownChange(r: WhatIf): number {
+  return shownYears(shownYears(r.scenario_years) - shownYears(r.current_years))
+}
+
+/** The result card's three numbers, all derived from one rounding so they cannot contradict. */
+function describeResult(r: WhatIf): ResultRow {
+  const change = shownChange(r)
+  return {
+    now: fmtYears(shownYears(r.current_years)),
+    after: fmtYears(shownYears(r.scenario_years)),
+    change: fmtDelta(change),
+    tone: deltaTone(change),
+  }
+}
+
 /** A short human summary of which levers a scenario changed. */
 function summarizeChanges(changes: WhatIfChanges, baseSmoke: SmokeStatus): string {
   const parts: string[] = []
   if (changes.smoke !== undefined) parts.push(`smoking → ${SMOKE_LABEL[changes.smoke]}`)
-  if (changes.pa_min !== undefined) parts.push(`activity → ${changes.pa_min.toFixed(0)} MET-min`)
+  // "MET-min" is an abbreviation of a term that is itself an abbreviation. The page spells
+  // MET-minutes out once, under the activity slider, and every later mention uses that same word.
+  if (changes.pa_min !== undefined) parts.push(`activity → ${changes.pa_min.toFixed(0)} MET-minutes`)
   // Only while the scenario still smokes: "smoking → Never, 5 cigarettes/day" describes nobody, and
   // the service zeroes the dose on quitting anyway. The base status is passed in rather than
   // defaulted to "current": defaulting is only correct while the dose slider renders exclusively
@@ -117,7 +181,18 @@ export function WhatIfPage() {
   // which is honest and is reachable: quitting and becoming a former smoker price identically,
   // because the service maps any reduction in smoking to the never-smoker contrast. (This comment
   // used to claim insertion order broke them. It does not, and never did.)
-  const bestDelta = scenarios.length ? Math.max(...scenarios.map((s) => s.result.delta_years)) : null
+  //
+  // Ranked on `shownChange`, the same number the rows print. Ranking on the raw delta let the badge
+  // disagree with the figures underneath it: two scenarios shown as "+0.1 yr" and "+0.1 yr" would
+  // have one badge between them because their unrounded deltas differed, and a row shown as
+  // "±0.0 yr" could outrank a row shown as "+0.1 yr". A reader cannot see the number the badge was
+  // arguing from, so the badge has to argue from the number they can see.
+  const bestChange = scenarios.length ? Math.max(...scenarios.map((s) => shownChange(s.result))) : null
+
+  // One reference to the answer being drawn, so the row's numbers and its words are read from the
+  // same object rather than from two lookups that a re-render could put out of step.
+  const result = whatif.data
+  const row = result ? describeResult(result) : null
 
   return (
     <div>
@@ -147,13 +222,25 @@ export function WhatIfPage() {
             </div>
           </div>
 
+          {/* The interview asks for days and minutes; this slider used to answer in MET-minutes
+              with no bridge, so the reader met a new unit at the exact moment they were asked to
+              move it. The VALUE stays in MET-minutes — it is what the service scores, and
+              converting it here would send the model a different number than the one on screen —
+              so the row explains the unit instead of replacing it. */}
           <SliderRow
-            label="Weekly active minutes (MET-min)"
+            label="Activity per week"
+            help="MET-minutes score how long you move and how hard; brisk walking is about 4 per minute."
             min={0}
             max={4000}
             step={100}
             value={pa}
-            display={`${pa.toFixed(0)}`}
+            // Below 5 minutes of walking the bridge says nothing worth saying, and "roughly 0
+            // minutes of brisk walking" is not a sentence anyone needs to read.
+            display={
+              walkingMinutes(pa) >= 5
+                ? `${pa.toFixed(0)} MET-minutes — roughly ${walkingMinutes(pa)} minutes of brisk walking`
+                : `${pa.toFixed(0)} MET-minutes`
+            }
             onChange={(v) => setChanges((c) => ({ ...c, pa_min: v }))}
           />
           {/* Only a current smoker has a dose to change, and only then does the model score one.
@@ -217,7 +304,7 @@ export function WhatIfPage() {
           however long without anyone noticing. A refusal is an answer and belongs on screen. */}
       {whatif.isError && <ErrorState message={(whatif.error as Error).message} />}
 
-      {whatif.data && (
+      {result && row && (
         <Card className="mt-5">
           {/* The card outlives the sliders that produced it. Saying so is the difference between a
               stale number and a wrong one: without this, a person reads the sliders in front of
@@ -231,29 +318,29 @@ export function WhatIfPage() {
           <div className={`grid grid-cols-3 items-center gap-4 text-center ${stale ? 'opacity-50' : ''}`}>
             <div>
               <div className="text-xs text-clock-muted">now</div>
-              <div className="text-xl font-semibold text-clock-ink">{fmtYears(whatif.data.current_years)}</div>
+              <div className="text-xl font-semibold text-clock-ink">{row.now}</div>
             </div>
             <div>
               <div className="text-xs text-clock-muted">change</div>
               <div
                 className={`text-2xl font-bold ${
-                  deltaTone(whatif.data.delta_years) === 'good'
+                  row.tone === 'good'
                     ? 'text-clock-good'
-                    : deltaTone(whatif.data.delta_years) === 'bad'
+                    : row.tone === 'bad'
                       ? 'text-clock-bad'
                       : 'text-clock-muted'
                 }`}
               >
-                {fmtDelta(whatif.data.delta_years)}
+                {row.change}
               </div>
             </div>
             <div>
               <div className="text-xs text-clock-muted">changed</div>
-              <div className="text-xl font-semibold text-clock-ink">{fmtYears(whatif.data.scenario_years)}</div>
+              <div className="text-xl font-semibold text-clock-ink">{row.after}</div>
             </div>
           </div>
-          {whatif.data.note && (
-            <p className="mt-3 rounded-lg bg-clock-warn/5 p-2 text-xs text-clock-warn">{whatif.data.note}</p>
+          {result.note && (
+            <p className="mt-3 rounded-lg bg-clock-warn/5 p-2 text-xs text-clock-warn">{result.note}</p>
           )}
           <div className="mt-3 flex items-center justify-between gap-3">
             <StatisticalEstimateNote>
@@ -283,8 +370,10 @@ export function WhatIfPage() {
             </thead>
             <tbody>
               {scenarios.map((s) => {
-                const isBest = s.result.delta_years === bestDelta && bestDelta! > 0
-                const tone = deltaTone(s.result.delta_years)
+                // The same description the card gave this scenario: one scenario, one answer.
+                const change = shownChange(s.result)
+                const isBest = change === bestChange && bestChange! > 0
+                const tone = deltaTone(change)
                 return (
                   <tr key={s.id} className={`border-b border-clock-line last:border-0 ${isBest ? 'bg-clock-good/5' : ''}`}>
                     <td className="py-2 text-clock-ink">
@@ -300,7 +389,7 @@ export function WhatIfPage() {
                         tone === 'good' ? 'text-clock-good' : tone === 'bad' ? 'text-clock-bad' : 'text-clock-muted'
                       }`}
                     >
-                      {fmtDelta(s.result.delta_years)}
+                      {fmtDelta(change)}
                     </td>
                   </tr>
                 )
@@ -333,6 +422,7 @@ function MarkerRow({ label, display, reason }: { label: string; display: string;
 
 function SliderRow({
   label,
+  help,
   min,
   max,
   step,
@@ -341,6 +431,8 @@ function SliderRow({
   onChange,
 }: {
   label: string
+  /** One line under the label, for a unit or a caveat the label itself cannot carry. */
+  help?: string
   min: number
   max: number
   step: number
@@ -350,13 +442,18 @@ function SliderRow({
 }) {
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between">
+      <div className="mb-1 flex items-baseline justify-between gap-3">
         <label className="label">{label}</label>
-        <span className="text-sm font-medium text-clock-ink">{display}</span>
+        <span className="text-right text-sm font-medium text-clock-ink">{display}</span>
       </div>
+      {help && <p className="mb-2 text-xs text-clock-muted">{help}</p>}
       <input
         type="range"
         aria-label={label}
+        // The row on screen says "400 MET-minutes — roughly 100 minutes of brisk walking"; without
+        // this a screen reader announces "400" and the unit stays behind, which is the same defect
+        // this change exists to fix, only for a reader who cannot see the fix.
+        aria-valuetext={display}
         min={min}
         max={max}
         step={step}

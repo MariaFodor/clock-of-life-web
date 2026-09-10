@@ -116,6 +116,72 @@ describe('restoring the saved Life Clock', () => {
   })
 })
 
+// UX-4: the card kept the model's number and none of its meaning — "Relative risk 0.56×" under a
+// label only a statistician reads, explained by a hover title a touch reader never sees, next to a
+// country the page named by its two-letter code.
+describe('the risk figure in words', () => {
+  const withRisk = (relative_risk: number) => ({
+    profile: SAMPLE_PROFILE,
+    estimate: { ...SAMPLE_ESTIMATE, relative_risk },
+  })
+
+  it('says how much lower the risk is when the relative risk is below 1', async () => {
+    renderWithProviders(<LifeClockPage />, withRisk(0.56))
+    const sentence = await screen.findByText(/yearly risk of dying/i)
+    // |1 − 0.56| = 44%, and the direction is a word rather than a number the reader must interpret.
+    expect(sentence).toHaveTextContent('44%')
+    expect(sentence).toHaveTextContent('lower')
+    expect(sentence).not.toHaveTextContent('higher')
+    // The number itself stays on the card, under a label that now says what it measures.
+    expect(screen.getByText('Yearly risk vs the average').nextElementSibling)
+      .toHaveTextContent('0.56×')
+  })
+
+  it('says how much higher it is when the relative risk is above 1', async () => {
+    renderWithProviders(<LifeClockPage />, withRisk(1.28))
+    const sentence = await screen.findByText(/yearly risk of dying/i)
+    expect(sentence).toHaveTextContent('28%')
+    expect(sentence).toHaveTextContent('higher')
+    expect(sentence).not.toHaveTextContent('lower')
+  })
+
+  it('claims no difference at all when the relative risk is 1', async () => {
+    renderWithProviders(<LifeClockPage />, withRisk(1))
+    const sentence = await screen.findByText(/yearly risk of dying/i)
+    expect(sentence).toHaveTextContent('about the same')
+    // "0% lower" is what a percentage computed without a direction produces, and it is not English.
+    expect(sentence).not.toHaveTextContent('%')
+  })
+
+  it('rounds to a direction rather than to a percentage of nothing', async () => {
+    // 0.998 is a difference the model has and a reader does not: two tenths of one percent rounds
+    // to zero, and the sentence has to pick the word that goes with zero.
+    renderWithProviders(<LifeClockPage />, withRisk(0.998))
+    const sentence = await screen.findByText(/yearly risk of dying/i)
+    expect(sentence).toHaveTextContent('about the same')
+    expect(sentence).not.toHaveTextContent('0%')
+  })
+
+  it('names the country instead of showing the code the profile stores', async () => {
+    renderWithProviders(<LifeClockPage />, withRisk(0.56))
+    // The profile stores "RO"; the name travels with the country list from /api/meta.
+    expect(await screen.findByText(/the average person in Romania/i)).toBeInTheDocument()
+    expect(screen.queryByText(/in RO\b/)).toBeNull()
+    expect(screen.queryByText(/centred on/i)).toBeNull()
+  })
+
+  it('tells the two comparisons apart on the benchmark card', async () => {
+    // Both figures called their yardstick "the average person", so a reader could not tell whether
+    // they meant the same people — nor why a large difference in risk sits beside a small one in
+    // years. The clause says which people, and which quantity.
+    renderWithProviders(<LifeClockPage />, withRisk(0.56))
+    const clause = await screen.findByText(/“Average” here means/i)
+    expect(clause).toHaveTextContent(/your age and sex in Romania/i)
+    expect(clause).toHaveTextContent(/years of life left/i)
+    expect(clause).toHaveTextContent(/chance of dying in a year/i)
+  })
+})
+
 describe('carried notices', () => {
   it('shows a notice handed over by the interview and lets the user dismiss it', async () => {
     const user = userEvent.setup()

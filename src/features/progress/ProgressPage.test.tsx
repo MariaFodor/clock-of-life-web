@@ -20,6 +20,19 @@ describe('<ProgressPage/>', () => {
     expect(screen.getByText(/reaches age/i)).toBeInTheDocument()
   })
 
+  // UX-4: the row read "RR 0.62×" — the model's shorthand for a comparison, and a history row is no
+  // place to learn it.
+  it('spells the comparison out instead of abbreviating it', async () => {
+    const client = createMockClient()
+    await client.estimate(SAMPLE_PROFILE)
+    renderWithProviders(<ProgressPage />, { client })
+
+    const row = await screen.findByText(/risk vs average/i)
+    // Still the same figure, still compact enough for a history row.
+    expect(row).toHaveTextContent(/risk vs average \d+\.\d{2}×/)
+    expect(row).not.toHaveTextContent(/\bRR\b/)
+  })
+
   it('shows a trend sparkline once there is more than one calculation', async () => {
     const client = createMockClient()
     await client.estimate(SAMPLE_PROFILE)
