@@ -5,7 +5,7 @@
 // apart women and men are in the same place.
 
 import { Card } from '../../components/ui'
-import { keyOf, MEASURES, formatValue, measureById, rankOf, valueOf } from './measures'
+import { keyOf, MEASURES, formatValue, longUnitOf, measureById, rankOf, valueOf } from './measures'
 import type { Measure } from './measures'
 import type { AtlasCountry, SexKey } from '../../api/types'
 
@@ -61,6 +61,11 @@ export function CountryCard({
             <tr key={m.id} className="border-b border-clock-line last:border-0">
               <td className={`py-2 ${m.id === measure.id ? 'font-medium text-clock-ink' : 'text-clock-muted'}`}>
                 {m.label}
+                {/* The unit under every row, not only under the odd one out. Two of these rows are
+                    years and one counts deaths per 1,000 people alive at 15, in the same column and
+                    the same typeface: "128" beside "79.6" with nothing to tell them apart was the
+                    defect, and labelling one row would only move the guessing. */}
+                <span className="block text-xs font-normal text-clock-muted">{longUnitOf(m)}</span>
               </td>
               {(['f', 'm', 'b'] as SexKey[]).map((s) => {
                 const v = valueOf(country, m.id, s)

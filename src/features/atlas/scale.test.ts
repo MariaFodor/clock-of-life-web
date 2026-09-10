@@ -31,12 +31,27 @@ describe('choropleth scale', () => {
     expect(used.size).toBe(CLASSES)
   })
 
-  it('darker always means longer lives, so the mortality ramp runs backwards', () => {
+  it('the strongest colour always means longer lives, so the mortality ramp runs backwards', () => {
     const up = buildScale(oneToTwelve, { higherIsBetter: true })
     const down = buildScale(oneToTwelve, { higherIsBetter: false })
     expect(alphaOf(up.fillOfClass(CLASSES - 1))).toBeGreaterThan(alphaOf(up.fillOfClass(0)))
     expect(alphaOf(down.fillOfClass(CLASSES - 1))).toBeLessThan(alphaOf(down.fillOfClass(0)))
     expect(down.inverted).toBe(true)
+  })
+
+  it('says it in ALPHA, which is the only channel that rises in both themes', () => {
+    // The invariant is strength, not darkness: alpha rising over a white sea reads as darker and
+    // over a near-black one as lighter, and the legend used to promise "darker" on both. Whatever
+    // the ramp is called, every class must differ from its neighbour in alpha and in nothing else —
+    // one hue, one channel, monotonic — because that is the only claim the copy can make honestly.
+    const s = buildScale(oneToTwelve, { higherIsBetter: true })
+    const fills = Array.from({ length: CLASSES }, (_, cls) => s.fillOfClass(cls))
+    expect(new Set(fills.map((f) => f.replace(/\/ [\d.]+\)/, '')))).toEqual(
+      new Set(['rgb(var(--clock-brand) ']),
+    )
+    const alphas = fills.map(alphaOf)
+    expect([...alphas].sort((a, b) => a - b)).toEqual(alphas)
+    expect(new Set(alphas).size).toBe(CLASSES)
   })
 
   it('renders missing data as the neutral fill, never as a value', () => {

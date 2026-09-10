@@ -17,9 +17,16 @@ export interface Measure {
   label: string
   /** unit shown next to a value */
   unit: string
+  /**
+   * The unit spelled out, for the two places with room for a full phrase: the legend's own line and
+   * the country card. `unit` is the short form, and it stays short because it has to fit beside a
+   * number in a dense row — "128 per 1,000 alive at 15" in a table cell is unreadable, and "128"
+   * with the unit nowhere on the card was the defect. Omitted where there is nothing to spell out.
+   */
+  unitLong?: string
   /** How the figure is produced, for the page to say plainly. */
   derivation: string
-  /** true when the ramp should darken as the number grows. Ramp DIRECTION only. */
+  /** true when the ramp should grow STRONGER as the number grows. Ramp DIRECTION only. */
   higherIsBetter: boolean
   /**
    * What a bigger number means for how long people live — and `'none'` when it means neither.
@@ -27,11 +34,22 @@ export interface Measure {
    * These two came apart on the women-minus-men gap and had to be separated. The gap is a DIFFERENCE:
    * the widest ones (Russia, Ukraine, Belarus, at 10-13 years) are where male mortality is
    * catastrophic, and the narrowest include both Norway and Nigeria. Treating "bigger" as "better"
-   * painted those countries darkest under a legend reading "darker always means people live longer",
-   * and put Ukraine under a heading reading LONGEST LIVES. The colour promise is still worth keeping
-   * on the three measures where it holds; it simply does not extend to a difference.
+   * gave those countries the strongest colour under a legend promising the colour tracked how long
+   * people live, and put Ukraine under a heading reading LONGEST LIVES. The colour promise is still
+   * worth keeping on the three measures where it holds; it simply does not extend to a difference.
    */
-  longevity: 'up' | 'down' | 'none' 
+  longevity: 'up' | 'down' | 'none'
+  /**
+   * The words at the two ends of the legend's value axis: what the SMALLEST numbers it prints mean,
+   * and what the LARGEST ones mean. Written per measure rather than derived from `longevity`,
+   * because "down" does not imply "deaths" — the next falling measure we add might be years lost,
+   * and a derived pair would then say something false with no test able to notice.
+   *
+   * These label the numbers, not the colours, and that is the point: the colour ramp reads as
+   * darkening on a light screen and lightening on a dark one, while the numbers run the same way in
+   * both. See the note at the top of `scale.ts`.
+   */
+  legendEnds: { low: string; high: string }
   /** false for the women-minus-men gap, which is a comparison BETWEEN the sexes */
   bySex: boolean
   decimals: number
@@ -47,6 +65,7 @@ export const MEASURES: Measure[] = [
     derivation: 'remaining_le(qx, 0, rr=1) — the same integrator as your own Life Clock',
     higherIsBetter: true,
     longevity: 'up',
+    legendEnds: { low: 'shorter lives', high: 'longer lives' },
     bySex: true,
     decimals: 1,
     note: 'How long a baby born here would live if this year’s death rates held for their whole life. It is a snapshot of the present, not a forecast of the future.',
@@ -58,6 +77,7 @@ export const MEASURES: Measure[] = [
     derivation: 'remaining_le(qx, 60, rr=1)',
     higherIsBetter: true,
     longevity: 'up',
+    legendEnds: { low: 'shorter lives', high: 'longer lives' },
     bySex: true,
     decimals: 1,
     note: 'Life expectancy for someone who has already reached 60 — always more than "at birth" minus 60, because they have survived everything that happens before it.',
@@ -66,9 +86,14 @@ export const MEASURES: Measure[] = [
     id: 'am',
     label: 'Deaths between 15 and 60',
     unit: 'per 1,000',
+    unitLong: 'per 1,000 alive at 15',
     derivation: '1000 × (1 − Π(1 − qx) over ages 15–59)',
     higherIsBetter: false,
     longevity: 'down',
+    // The colour on this map runs backwards against the number, but the printed ranges do not: the
+    // legend's left end is still its smallest figure. So the ends are said in DEATHS, the thing the
+    // ranges count — "shorter lives" beside the fewest deaths would be exactly wrong.
+    legendEnds: { low: 'fewer deaths', high: 'more deaths' },
     bySex: true,
     decimals: 0,
     note: 'Of 1,000 people alive at 15, how many would die before 60 if this year’s death rates held — the same synthetic snapshot as life expectancy at birth, and the working-age mortality that figure blends together with infant deaths and old age.',
@@ -80,6 +105,8 @@ export const MEASURES: Measure[] = [
     derivation: 'life expectancy at birth, women minus men',
     higherIsBetter: true,
     longevity: 'none',
+    // Not "shorter/longer lives": a wide gap is not a long life, it is a short male one.
+    legendEnds: { low: 'narrower gap', high: 'wider gap' },
     bySex: false,
     decimals: 1,
     note: 'Women’s life expectancy at birth minus men’s. It is positive almost everywhere, and it is not biology alone — the gap moves with smoking, drinking and violent death, which is why it varies so much between countries.',
@@ -121,6 +148,9 @@ export function valueOf(country: AtlasCountry, measure: MeasureId, sex: SexKey):
 
 export const formatValue = (v: number, measure: Measure): string =>
   `${v.toFixed(measure.decimals)} ${measure.unit}`
+
+/** The unit for a place with room for the whole phrase; falls back to the short form. */
+export const longUnitOf = (measure: Measure): string => measure.unitLong ?? measure.unit
 
 /** The words for each end of the ranking, so nothing downstream has to guess what "first" means. */
 export const endsOf = (measure: Measure): { first: string; last: string } =>

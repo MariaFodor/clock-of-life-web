@@ -14,7 +14,14 @@ import { useProfile } from '../../app/profile'
 import { Card, ErrorState, Loading, PageHeader } from '../../components/ui'
 import { StatisticalEstimateNote } from '../../components/framing'
 import { AirLayer, AirLegend } from './AirLayer'
-import { MapLegend, MapReadout, MortalityMap, PlaceReadout } from './MortalityMap'
+import {
+  MapLegend,
+  MapReadout,
+  MortalityMap,
+  PlaceReadout,
+  placeReadoutLine,
+  readoutLine,
+} from './MortalityMap'
 import { CountryCard } from './CountryCard'
 import { CountryTable } from './CountryTable'
 import {
@@ -213,6 +220,44 @@ export function AtlasPage() {
     if (countryByKey(countries, iso3)) setPicked(iso3)
   }
 
+  // The hovered STATION, when there is one — the input to BOTH channels that speak for it, so the
+  // sentence exists in one place only.
+  const placeCountry = hoveredPlace ? countryByKey(countries, hoveredPlace.iso3) : undefined
+  const place = hoveredPlace
+    ? {
+        place: hoveredPlace,
+        reference: placeCountry?.env,
+        countryName: placeCountry?.name ?? hoveredPlace.iso3,
+      }
+    : null
+
+  // What the tooltip at the cursor says: whatever the readout below the map is saying, because the
+  // tooltip is a second copy of that live region rather than a channel of its own.
+  //
+  // A hovered station therefore wins here exactly as it does in the readout. It has to be asked
+  // FIRST: the dot does not clear `hovered` — it sits on a country, and that country is still under
+  // the pointer — so reading the tooltip off `hovered` alone put the country's sentence at the
+  // cursor while the live region below had already switched to the place's. Both on screen at once,
+  // about different things.
+  //
+  // The country half is built from `hovered` alone, NOT from `readoutIso`: the readout falls back to
+  // the pinned country so its line is never blank, and a tooltip doing that would follow the pointer
+  // around the ocean naming a country nobody is pointing at. Nothing under the pointer, no tooltip.
+  const hoveredCountry = countryByKey(countries, hovered)
+  const tip = place
+    ? placeReadoutLine(place)
+    : hovered
+      ? readoutLine({
+          name: hoveredCountry?.name ?? undefined,
+          unreported: !hoveredCountry,
+          value: values.get(hovered),
+          measure,
+          sexNote: measure.bySex ? `(${sexLabel(effectiveSex)})` : '',
+          noAirMeasurement: Boolean(unmeasured?.has(hovered)),
+          nationalPm25: hoveredCountry?.env?.pm25 ?? undefined,
+        })
+      : null
+
   return (
     <div>
       <PageHeader
@@ -293,6 +338,7 @@ export function AtlasPage() {
                 home={home ? keyOf(home) : undefined}
                 onSelect={select}
                 onHover={setHovered}
+                tip={tip}
                 unmeasured={unmeasured}
                 overlay={
                   air && environment.data && geo.data ? (
@@ -326,13 +372,10 @@ export function AtlasPage() {
             )}
             <div className="mt-2">
               {/* A hovered STATION wins over a hovered country: the reader's pointer is on the dot, and
-                  the dot is the more specific thing under it. */}
-              {hoveredPlace ? (
-                <PlaceReadout
-                  place={hoveredPlace}
-                  reference={countryByKey(countries, hoveredPlace.iso3)?.env}
-                  countryName={countryByKey(countries, hoveredPlace.iso3)?.name ?? hoveredPlace.iso3}
-                />
+                  the dot is the more specific thing under it. The tooltip at the cursor takes the
+                  same branch from the same `place`, so the two channels cannot disagree. */}
+              {place ? (
+                <PlaceReadout {...place} />
               ) : (
                 <MapReadout
                   name={readoutCountry?.name ?? undefined}

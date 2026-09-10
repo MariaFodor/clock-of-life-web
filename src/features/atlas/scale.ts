@@ -7,10 +7,23 @@
 //    see. Equal-count classes always differentiate — the price is that the classes are unequal in
 //    value, so the legend prints the actual boundaries and never leaves the reader guessing.
 //
-// 2. DARKER ALWAYS MEANS PEOPLE LIVE LONGER, including on the mortality map, where that means the
-//    ramp runs backwards against the number. Keeping the colour's meaning fixed across measures is
-//    worth more than keeping its direction fixed against the value: a reader who learns "dark = good
-//    news" on one map and carries it to the next is right, instead of exactly wrong.
+// 2. THE STRONGER THE COLOUR, THE BETTER THE NEWS — including on the mortality map, where that means
+//    the ramp runs backwards against the number. Keeping the colour's meaning fixed across measures
+//    is worth more than keeping its direction fixed against the value: a reader who learns "strong
+//    colour = good news" on one map and carries it to the next is right, instead of exactly wrong.
+//    It holds on the three measures where "better" has a direction at all; the women-minus-men gap
+//    is a difference and opts out of the promise (see `Measure.longevity`).
+//
+//    STRENGTH, not darkness. This comment and the legend both said "darker always means people live
+//    longer" for as long as the map existed, and it was only ever true on the LIGHT theme. The ramp
+//    is one hue at rising ALPHA: over a white sea more alpha reads as darker, and over the dark
+//    theme's near-black sea more of a light blue reads as LIGHTER — Africa the darkest region on
+//    screen, western Europe the lightest, the exact opposite of what the caption promised. The app
+//    follows the reader's operating system unless they have chosen (`app/theme.tsx`), so it does not
+//    even know which of the two it is talking to. Alpha is the one thing that rises in both, so
+//    "stronger" is the only word the copy may use — and the legend now also labels its two ends in
+//    words, which is the part that survives a reader disagreeing with us about what "stronger"
+//    looks like (`Measure.legendEnds`).
 
 import type { Measure } from './measures'
 
