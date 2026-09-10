@@ -92,9 +92,25 @@ export function WhatIfPage() {
     setChanges({})
     whatif.reset()
   }
+  /** A stable serialization, so a comparison cannot turn on key order. */
+  const asKey = (c: WhatIfChanges) =>
+    JSON.stringify(Object.entries(c).filter(([, v]) => v !== undefined).sort())
+
+  /** True once the sliders have moved away from the scenario that produced the shown result. */
+  const stale = Boolean(whatif.data) && asKey(submitted()) !== asKey(whatif.variables?.changes ?? {})
+
   const save = () => {
-    if (!whatif.data) return
-    setScenarios((prev) => [...prev, { id: Date.now(), summary: summarizeChanges(submitted(), profile.smoke), result: whatif.data! }])
+    if (!whatif.data || !whatif.variables) return
+    // The summary describes the scenario that was PRICED, not wherever the sliders happen to sit.
+    // Reading live state here paired one row's label with another row's number: drag to 5, run,
+    // drag on to 20 without re-running, save — and the board reported "20 cigarettes/day · best ·
+    // +1.3 yr" for a change actually worth -0.6. Sign inverted, magnitude wrong, badge attached.
+    // useMutation already keeps the payload that produced this answer; use it.
+    setScenarios((prev) => [...prev, {
+      id: Date.now(),
+      summary: summarizeChanges(whatif.variables!.changes, profile.smoke),
+      result: whatif.data!,
+    }])
   }
 
   // Best = the largest gain in years (ties broken by insertion order).
@@ -200,7 +216,16 @@ export function WhatIfPage() {
 
       {whatif.data && (
         <Card className="mt-5">
-          <div className="grid grid-cols-3 items-center gap-4 text-center">
+          {/* The card outlives the sliders that produced it. Saying so is the difference between a
+              stale number and a wrong one: without this, a person reads the sliders in front of
+              them and the years underneath them as one statement. */}
+          {stale && (
+            <p role="status" className="mb-3 rounded-lg bg-clock-warn/5 p-2 text-xs text-clock-warn">
+              These years are for the scenario you last calculated, not the one on the sliders now.
+              Choose “See the effect” again to price this one.
+            </p>
+          )}
+          <div className={`grid grid-cols-3 items-center gap-4 text-center ${stale ? 'opacity-50' : ''}`}>
             <div>
               <div className="text-xs text-clock-muted">now</div>
               <div className="text-xl font-semibold text-clock-ink">{fmtYears(whatif.data.current_years)}</div>

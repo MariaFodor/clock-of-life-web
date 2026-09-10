@@ -150,6 +150,74 @@ describe('<WhatIfPage/>', () => {
     expect(screen.getByText(/13 \(assumed\)/)).toBeInTheDocument()
   })
 
+  // The sixth entry point for this branch's defect class, and the one that could assert the
+  // opposite of the truth: the board paired the CURRENT slider text with the LAST run's number.
+  it('saves the scenario that was priced, not wherever the sliders now sit', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+    const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
+
+    // Price a real cut, then move the slider the OTHER WAY without re-running, then save.
+    fireEvent.change(dose, { target: { value: '5' } })
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+    const priced = (await screen.findByText(/\+\d+\.\d+ yr/)).textContent
+    fireEvent.change(dose, { target: { value: '20' } })
+    await user.click(await screen.findByRole('button', { name: /save to compare/i }))
+
+    // The row must describe the 5 that was priced. Labelling it "20 cigarettes/day" next to a gain
+    // told a 15-a-day smoker that smoking MORE was their best scenario.
+    const row = screen.getByText(/cigarettes\/day/).closest('tr') ?? screen.getByText(/cigarettes\/day/)
+    expect(row).toHaveTextContent('5 cigarettes/day')
+    expect(row).not.toHaveTextContent('20 cigarettes/day')
+    expect(row).toHaveTextContent(priced!.trim())
+  })
+
+  it('says so when the sliders have moved on from the result on screen', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+    const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
+    fireEvent.change(dose, { target: { value: '5' } })
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+    await screen.findByText(/\+\d+\.\d+ yr/)
+    expect(screen.queryByText(/not the one on the sliders now/i)).not.toBeInTheDocument()
+
+    fireEvent.change(dose, { target: { value: '20' } })
+    expect(await screen.findByText(/not the one on the sliders now/i)).toBeInTheDocument()
+
+    // Back to what was priced: no longer stale.
+    fireEvent.change(dose, { target: { value: '5' } })
+    expect(screen.queryByText(/not the one on the sliders now/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps saying "(assumed)" for as long as the number is still ours', async () => {
+    renderWithProviders(<WhatIfPage />, {
+      profile: { ...SAMPLE_PROFILE, smoke: 2, cigs_day: 0 },
+    })
+    const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
+    expect(screen.getByText(/13 \(assumed\)/)).toBeInTheDocument()
+    // Their number now: no longer ours to disclaim.
+    fireEvent.change(dose, { target: { value: '20' } })
+    expect(screen.queryByText(/assumed/)).not.toBeInTheDocument()
+    // Back on our seed: it is ours again, and the row has to keep saying so. This asked whether the
+    // user had TOUCHED the slider, which is not the same question.
+    fireEvent.change(dose, { target: { value: '13' } })
+    expect(screen.getByText(/13 \(assumed\)/)).toBeInTheDocument()
+  })
+
+  it('never labels a saved scenario as both quitting and still smoking', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
+    fireEvent.change(screen.getByRole('slider', { name: /cigarettes per day/i }),
+                     { target: { value: '5' } })
+    await user.click(screen.getByRole('button', { name: 'Never' }))
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+    await screen.findByText(/\+\d+\.\d+ yr/)
+    await user.click(await screen.findByRole('button', { name: /save to compare/i }))
+
+    expect(screen.getByText(/smoking → Never/i)).toBeInTheDocument()
+    expect(screen.queryByText(/cigarettes\/day/)).not.toBeInTheDocument()
+  })
+
   it('never offers a zero dose, which the model reads as unanswered rather than as quitting', () => {
     renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
     // min=1: the service refuses a zero dose from a smoker, because scoring it would impute the
