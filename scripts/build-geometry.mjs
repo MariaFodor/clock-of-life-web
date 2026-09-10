@@ -189,7 +189,18 @@ function buildView(features, { project, clip, frame, width, tolerance, minArea }
       .join('')
     if (d) countries[s.iso3] = d
   }
-  return { viewBox: `0 0 ${width} ${height}`, countries }
+  // The fit, emitted so the app can project a POINT into the same space these paths live in.
+  //
+  // Without this the only way to place a city on the map would be to re-derive minX/maxY/scale in the
+  // browser, which means re-running the whole clip-and-extent pass over 177 outlines. Three numbers
+  // instead. The projection formula itself is shared rather than restated — see
+  // `src/features/atlas/projection.ts` — and `projection.test.ts` checks the pair end to end by
+  // projecting real cities and asserting each lands inside its own country's shape.
+  return {
+    viewBox: `0 0 ${width} ${height}`,
+    _fit: { minX, maxY, scale, width, height },
+    countries,
+  }
 }
 
 const round = (n) => Math.round(n * 10) / 10
