@@ -4,7 +4,7 @@
 // have a shape at this scale (Malta, Singapore, Mauritius, the island states), the only way through
 // the data without a mouse, and the fastest way to answer "where does my country come".
 
-import { keyOf, formatValue, ranked, valueOf } from './measures'
+import { endsOf, keyOf, formatValue, ranked, valueOf } from './measures'
 import type { Measure } from './measures'
 import type { AtlasCountry, SexKey } from '../../api/types'
 
@@ -35,7 +35,7 @@ export function CountryTable({
           <caption className="sr-only">
             {measure.label}
             {measure.bySex ? `, ${sex === 'f' ? 'women' : sex === 'm' ? 'men' : 'both sexes'}` : ''}, by country,
-            longest lives first
+            {endsOf(measure).first.toLowerCase()} first
           </caption>
           <thead className="sticky top-0 bg-clock-surface">
             <tr className="border-b border-clock-line text-left text-clock-muted">
@@ -48,9 +48,9 @@ export function CountryTable({
           <tbody>
             {rows.map((row, i) => (
               <tr
-                key={row.country.iso3}
+                key={keyOf(row.country)}
                 className={`border-b border-clock-line last:border-0 ${
-                  row.country.iso3 === selected ? 'bg-clock-brandsoft' : ''
+                  keyOf(row.country) === selected ? 'bg-clock-brandsoft' : ''
                 }`}
               >
                 <td className="py-1.5 text-clock-muted">{i + 1}</td>
@@ -64,7 +64,7 @@ export function CountryTable({
                     {row.country.name}
                   </button>
                 </td>
-                <td className="py-1.5 text-clock-muted">{row.country.region}</td>
+                <td className="py-1.5 text-clock-muted">{row.country.region ?? '—'}</td>
                 <td className="py-1.5 text-right font-medium text-clock-ink">
                   {formatValue(row.value, measure)}
                 </td>

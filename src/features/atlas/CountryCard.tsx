@@ -37,7 +37,7 @@ export function CountryCard({
     <Card testId="country-card">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-lg font-semibold text-clock-ink">{country.name}</h3>
-        <span className="text-xs text-clock-muted">{country.region}</span>
+        <span className="text-xs text-clock-muted">{country.region ?? '—'}</span>
       </div>
 
       {rank && (
@@ -50,7 +50,7 @@ export function CountryCard({
       <table className="mt-4 w-full text-sm">
         <thead>
           <tr className="border-b border-clock-line text-left text-clock-muted">
-            <th className="py-2 font-medium">UN WPP {year}</th>
+            <th className="py-2 font-medium">{year || '—'}</th>
             <th className="py-2 text-right font-medium">Women</th>
             <th className="py-2 text-right font-medium">Men</th>
             <th className="py-2 text-right font-medium">Both</th>

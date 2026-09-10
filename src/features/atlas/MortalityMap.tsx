@@ -105,8 +105,19 @@ export function MapLegend({ scale, measure }: { scale: ColorScale; measure: Meas
         </span>
       </div>
       <p className="mt-2 text-[11px] text-clock-muted">
-        {measure.unit}, in six equal-sized groups of countries. Darker always means people live
-        longer{scale.inverted ? ' — so on this map the darkest countries are the ones with the fewest deaths' : ''}.
+        {measure.unit}, in six equal-sized groups of the countries drawn here.{' '}
+        {measure.longevity === 'none' ? (
+          <>
+            Darker means a <em>wider</em> gap — which is not the same as better: the widest gaps are
+            where men die young, and the narrowest include both the longest-lived countries and the
+            shortest-lived.
+          </>
+        ) : (
+          <>
+            Darker always means people live longer
+            {scale.inverted ? ' — so here the darkest countries are the ones with the fewest deaths' : ''}.
+          </>
+        )}{' '}
         A dashed outline is your country; a solid one is the country you picked.
       </p>
     </div>
@@ -119,11 +130,15 @@ export function MapReadout({
   value,
   measure,
   sexNote,
+  unreported = false,
 }: {
   name?: string
   value?: number
   measure: Measure
   sexNote: string
+  /** The shape is drawn but the UN publishes no life table for it — Kosovo, Northern Cyprus,
+   *  Somaliland, the French Southern Territories. Saying so beats saying nothing at all. */
+  unreported?: boolean
 }) {
   return (
     <div
@@ -132,13 +147,17 @@ export function MapReadout({
       data-testid="map-readout"
       className="min-h-[1.5rem] text-sm text-clock-ink"
     >
-      {name && (
-        <>
-          <strong>{name}</strong>{' '}
-          <span className="text-clock-muted">
-            · {value === undefined ? 'no figure' : `${formatValue(value, measure)} ${sexNote}`}
-          </span>
-        </>
+      {unreported ? (
+        <span className="text-clock-muted">No life table is published for this territory.</span>
+      ) : (
+        name && (
+          <>
+            <strong>{name}</strong>{' '}
+            <span className="text-clock-muted">
+              · {value === undefined ? 'no figure' : `${formatValue(value, measure)} ${sexNote}`}
+            </span>
+          </>
+        )
       )}
     </div>
   )

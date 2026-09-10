@@ -29,7 +29,11 @@ export interface ColorScale {
   inverted: boolean
 }
 
-export const NO_DATA_FILL = 'rgb(var(--clock-line) / 0.55)'
+// A different HUE, not a paler one. Against the brand ramp's blue this grey is distinguishable at a
+// glance; a paler blue measured 1.16:1 against the lightest data class and 1.23:1 against the sea,
+// which meant the countries the map most exists to show — Nigeria, Chad, Lesotho, South Sudan — were
+// the ones a reader could not see.
+export const NO_DATA_FILL = 'rgb(var(--clock-muted) / 0.38)'
 
 /** Linear interpolation between order statistics — the same quantile definition d3 uses. */
 function quantileBreaks(values: number[], classes: number): number[] {
@@ -58,7 +62,9 @@ export function buildScale(values: number[], measure: Pick<Measure, 'higherIsBet
 
   const fillOfClass = (cls: number): string => {
     const t = cls / (CLASSES - 1)
-    const alpha = 0.16 + 0.84 * (inverted ? 1 - t : t)
+    // Floor at 0.30, not 0.16: below that the palest class is indistinguishable from the sea and
+    // from "no figure" in both themes, and colour is the only channel carrying the value.
+    const alpha = 0.3 + 0.7 * (inverted ? 1 - t : t)
     // A single hue at varying strength, expressed through the theme token: the map re-tints itself
     // in dark mode with the rest of the app instead of carrying its own hardcoded palette.
     return `rgb(var(--clock-brand) / ${alpha.toFixed(2)})`

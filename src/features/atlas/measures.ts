@@ -19,8 +19,19 @@ export interface Measure {
   unit: string
   /** How the figure is produced, for the page to say plainly. */
   derivation: string
-  /** true when a bigger number means people are living longer */
+  /** true when the ramp should darken as the number grows. Ramp DIRECTION only. */
   higherIsBetter: boolean
+  /**
+   * What a bigger number means for how long people live — and `'none'` when it means neither.
+   *
+   * These two came apart on the women-minus-men gap and had to be separated. The gap is a DIFFERENCE:
+   * the widest ones (Russia, Ukraine, Belarus, at 10-13 years) are where male mortality is
+   * catastrophic, and the narrowest include both Norway and Nigeria. Treating "bigger" as "better"
+   * painted those countries darkest under a legend reading "darker always means people live longer",
+   * and put Ukraine under a heading reading LONGEST LIVES. The colour promise is still worth keeping
+   * on the three measures where it holds; it simply does not extend to a difference.
+   */
+  longevity: 'up' | 'down' | 'none' 
   /** false for the women-minus-men gap, which is a comparison BETWEEN the sexes */
   bySex: boolean
   decimals: number
@@ -35,6 +46,7 @@ export const MEASURES: Measure[] = [
     unit: 'years',
     derivation: 'remaining_le(qx, 0, rr=1) — the same integrator as your own Life Clock',
     higherIsBetter: true,
+    longevity: 'up',
     bySex: true,
     decimals: 1,
     note: 'How long a baby born here would live if this year’s death rates held for their whole life. It is a snapshot of the present, not a forecast of the future.',
@@ -45,6 +57,7 @@ export const MEASURES: Measure[] = [
     unit: 'years',
     derivation: 'remaining_le(qx, 60, rr=1)',
     higherIsBetter: true,
+    longevity: 'up',
     bySex: true,
     decimals: 1,
     note: 'Life expectancy for someone who has already reached 60 — always more than "at birth" minus 60, because they have survived everything that happens before it.',
@@ -55,9 +68,10 @@ export const MEASURES: Measure[] = [
     unit: 'per 1,000',
     derivation: '1000 × (1 − Π(1 − qx) over ages 15–59)',
     higherIsBetter: false,
+    longevity: 'down',
     bySex: true,
     decimals: 0,
-    note: 'Of 1,000 people alive at 15, how many die before 60. This is the working-age mortality that life expectancy at birth blends together with infant deaths and old age.',
+    note: 'Of 1,000 people alive at 15, how many would die before 60 if this year’s death rates held — the same synthetic snapshot as life expectancy at birth, and the working-age mortality that figure blends together with infant deaths and old age.',
   },
   {
     id: 'gap',
@@ -65,6 +79,7 @@ export const MEASURES: Measure[] = [
     unit: 'years',
     derivation: 'life expectancy at birth, women minus men',
     higherIsBetter: true,
+    longevity: 'none',
     bySex: false,
     decimals: 1,
     note: 'Women’s life expectancy at birth minus men’s. It is positive almost everywhere, and it is not biology alone — the gap moves with smoking, drinking and violent death, which is why it varies so much between countries.',
@@ -107,7 +122,13 @@ export function valueOf(country: AtlasCountry, measure: MeasureId, sex: SexKey):
 export const formatValue = (v: number, measure: Measure): string =>
   `${v.toFixed(measure.decimals)} ${measure.unit}`
 
-/** Countries that have a value for this measure and sex, best-first (best = longest lives).
+/** The words for each end of the ranking, so nothing downstream has to guess what "first" means. */
+export const endsOf = (measure: Measure): { first: string; last: string } =>
+  measure.longevity === 'none'
+    ? { first: 'Widest gap', last: 'Narrowest gap' }
+    : { first: 'Longest lives', last: 'Shortest lives' }
+
+/** Countries that have a value for this measure and sex, ordered so the first is `endsOf().first`.
  *
  *  Takes the country list rather than importing it: the data module is ~80 KB that only the World
  *  surface ever needs, and it can only stay in its own lazily-loaded chunk if nothing on the eager

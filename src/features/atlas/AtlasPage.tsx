@@ -23,6 +23,7 @@ import {
   countryByKey,
   formatValue,
   keyOf,
+  endsOf,
   measureById,
   ranked,
   sexLabel,
@@ -96,8 +97,10 @@ function Extremes({
 }) {
   const list = ranked(countries, measure.id, sex)
   const ends: { title: string; rows: typeof list }[] = [
-    { title: 'Longest lives', rows: list.slice(0, 5) },
-    { title: 'Shortest lives', rows: list.slice(-5).reverse() },
+    // Named by the measure. On the women-minus-men gap "longest lives" would put Ukraine and Russia
+    // at the top — the countries where men die youngest — which is the opposite of what it says.
+    { title: endsOf(measure).first, rows: list.slice(0, 5) },
+    { title: endsOf(measure).last, rows: list.slice(-5).reverse() },
   ]
   return (
     <Card testId="extremes">
@@ -153,7 +156,9 @@ export function AtlasPage() {
   // Printed from the payload, never from a constant here: the page must attribute what it actually
   // drew. Change the artifact's retrieval date and this screen changes with it.
   const source = atlas.data?.sources?.[0]
-  const atlasYear = countries[0]?.lifetable_year ?? source?.year ?? 0
+  // The most recent year any country carries, not the first row's: a mixed-vintage bundle would
+  // otherwise stamp one country's year on the whole map, the header and every card.
+  const atlasYear = Math.max(0, ...countries.map((c) => c.lifetable_year ?? 0)) || source?.year || 0
   const home = countryByIso2(countries, profile?.country)
   const selected = picked ?? (home ? keyOf(home) : null)
 
@@ -166,10 +171,27 @@ export function AtlasPage() {
     return map
   }, [countries, measureId, effectiveSex])
 
-  const scale = useMemo(() => buildScale([...values.values()], measure), [values, measure])
+  // Built from the countries actually DRAWN in this view, not from all 237. Colouring Europe against
+  // the world's distribution put most of it in the top two classes and made the legend's promise of
+  // "six equal-sized groups" false exactly where the quantile choice was supposed to help.
+  const drawnValues = useMemo(() => {
+    const shapes = geo.data ? Object.keys(geo.data.countries) : null
+    return shapes ? shapes.filter((iso) => values.has(iso)).map((iso) => values.get(iso)!)
+                  : [...values.values()]
+  }, [geo.data, values])
+  const scale = useMemo(() => buildScale(drawnValues, measure), [drawnValues, measure])
 
   const readoutIso = hovered ?? selected
   const readoutCountry = countryByKey(countries, readoutIso)
+  // Four shapes are drawn that the UN publishes no life table for — Kosovo, Northern Cyprus,
+  // Somaliland, the French Southern Territories. Selecting one used to leave an outline on the map
+  // and nothing else on the page, and with a profile loaded it silently destroyed the reader's own
+  // country card. They stay hoverable, because saying "no life table is published for this
+  // territory" is better than saying nothing, and they stop being selectable.
+  const unreported = readoutIso !== null && !readoutCountry
+  const select = (iso3: string) => {
+    if (countryByKey(countries, iso3)) setPicked(iso3)
+  }
 
   return (
     <div>
@@ -177,7 +199,7 @@ export function AtlasPage() {
         title="The World"
         subtitle={
           atlas.data
-            ? `How long people live, country by country — and how far apart women and men are. UN World Population Prospects, ${atlasYear} estimates.`
+            ? `How long people live, country by country — and how far apart women and men are. ${source?.dataset ?? 'The model’s own life tables'}${atlasYear ? `, ${atlasYear} estimates` : ''}.`
             : 'How long people live, country by country — and how far apart women and men are.'
         }
       />
@@ -238,12 +260,13 @@ export function AtlasPage() {
                 measure={measure}
                 selected={selected}
                 home={home ? keyOf(home) : undefined}
-                onSelect={(iso3) => setPicked(iso3)}
+                onSelect={select}
                 onHover={setHovered}
                 label={
                   `${measure.label}${measure.bySex ? `, ${sexLabel(effectiveSex)}` : ''}, by country. ` +
-                  `${atlasYear}, ${values.size} countries with a figure. ` +
-                  'The country selector above and the table below carry the same numbers as text.'
+                  `${atlasYear}. ${drawnValues.length} countries are drawn here; ` +
+                  `${values.size} have a figure in total. The country selector above reaches every ` +
+                  'one of them, and the ranked table below the map carries the same numbers as text.'
                 }
               />
             )}
@@ -251,6 +274,7 @@ export function AtlasPage() {
             <div className="mt-2">
               <MapReadout
                 name={readoutCountry?.name ?? undefined}
+                unreported={unreported}
                 value={readoutIso ? values.get(readoutIso) : undefined}
                 measure={measure}
                 sexNote={measure.bySex ? `(${sexLabel(effectiveSex)})` : ''}
@@ -280,7 +304,7 @@ export function AtlasPage() {
               countries={countries}
               measure={measure}
               sex={effectiveSex}
-              onSelect={(iso3) => setPicked(iso3)}
+              onSelect={select}
             />
           </div>
 
@@ -290,18 +314,17 @@ export function AtlasPage() {
               measure={measure}
               sex={effectiveSex}
               selected={selected}
-              onSelect={(iso3) => setPicked(iso3)}
+              onSelect={select}
             />
           </Card>
 
           <div className="mt-4 space-y-2">
             <StatisticalEstimateNote>
               These are whole-population averages for a country in one year, not estimates about any
-              person in it. Your own Life Clock is built from the SAME life tables — the number on this
-              map is what this app computes for someone of average risk — but it is not a number to
-              subtract from yours: life expectancy at birth counts from zero and is dragged down by
-              every death before your age, while your estimate is conditional on the age you have
-              already reached.
+              person in it. Your own Life Clock is built from the SAME life tables, which is why the
+              two belong on the same screen — but the map is not a number to subtract from yours:
+              life expectancy at birth counts from zero and is dragged down by every death before
+              your age, while your estimate is conditional on the age you have already reached.
             </StatisticalEstimateNote>
             <p className="text-xs leading-relaxed text-clock-muted">
               {/* Printed from the served payload, not from a string in this file. The page cannot

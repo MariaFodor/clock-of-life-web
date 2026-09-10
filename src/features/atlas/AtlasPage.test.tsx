@@ -62,6 +62,35 @@ describe('<AtlasPage/>', () => {
     expect(container.querySelector('[data-iso3="MLT"]')).not.toBeNull()
   })
 
+  it('does not call the widest women–men gap "longest lives"', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<AtlasPage />, { profile: SAMPLE_PROFILE })
+    await screen.findByTestId('mortality-map')
+    await user.click(screen.getByRole('radio', { name: /advantage/i }))
+    // The widest gaps are where men die young — Russia, Ukraine, Belarus at 10-13 years. Labelling
+    // that end "longest lives", as a single higherIsBetter flag did, tells a reader the opposite of
+    // the truth in a health product.
+    expect(screen.queryByText(/longest lives/i)).not.toBeInTheDocument()
+    // Twice: the heading a sighted reader sees, and the table caption a screen reader hears.
+    expect(screen.getAllByText(/widest gap/i).length).toBeGreaterThanOrEqual(2)
+    // The legend must stop promising "darker means people live longer" on this measure. The phrase
+    // spans an <em>, so match on the assembled text rather than a single node.
+    expect(document.body.textContent).toMatch(/Darker means a wider gap/i)
+    expect(document.body.textContent).not.toMatch(/Darker always means people live longer/i)
+  })
+
+  it('does not blank the page when a reader clicks a territory with no life table', async () => {
+    const user = userEvent.setup()
+    const { container } = renderWithProviders(<AtlasPage />, { profile: SAMPLE_PROFILE })
+    await screen.findByTestId('mortality-map')
+    const kosovo = container.querySelector('[data-iso3="KOS"]') as SVGPathElement
+    expect(kosovo, 'Kosovo is drawn but the UN publishes no life table for it').not.toBeNull()
+    await user.click(kosovo)
+    // The reader's own country card must survive the click, and the map must say something.
+    expect(await screen.findByTestId('country-card')).toBeInTheDocument()
+    expect(screen.getByTestId('country-card')).toHaveTextContent('Romania')
+  })
+
   it('attributes what it drew from the payload, not from a string in the page', async () => {
     renderWithProviders(<AtlasPage />, { profile: SAMPLE_PROFILE })
     await screen.findByTestId('mortality-map')
