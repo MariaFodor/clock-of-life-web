@@ -232,3 +232,57 @@ export interface CohortStat {
   mean_estimate_years: number | null
   suppressed: boolean
 }
+
+// ── The World surface (GET /api/atlas) ────────────────────────────────────────
+
+/** Women, men, and both sexes together — every figure the atlas serves comes all three ways. */
+export type SexKey = 'f' | 'm' | 'b'
+
+/**
+ * One country as the atlas sees it.
+ *
+ * These are NOT a second dataset. Every number is `remaining_le` — the same function that produces
+ * the reader's own Life Clock — evaluated on the model bundle's own life table at age 0 and age 60
+ * with a relative risk of 1.0. The map and the clock are the same arithmetic over the same table.
+ */
+export interface AtlasCountry {
+  iso2: string
+  iso3: string | null
+  name: string | null
+  /** UN subregion, e.g. "Eastern Europe". */
+  region: string | null
+  lifetable_year: number | null
+  /**
+   * Whether this app can give a PERSON from this country a number. Life tables cover the world;
+   * the reference person a relative risk is centred on needs national smoking and overweight rates,
+   * which exist for Europe. A false here is a country the map draws and the clock must refuse.
+   */
+  scoreable: boolean
+  /** life expectancy at birth, years */
+  le0: Partial<Record<SexKey, number>>
+  /** years still ahead at 60 */
+  le60: Partial<Record<SexKey, number>>
+  /** of 1,000 people alive at 15, how many die before 60 */
+  am: Partial<Record<SexKey, number>>
+}
+
+/** Where the life tables came from — printed on the page rather than hardcoded into it. */
+export interface AtlasSource {
+  dataset: string
+  publisher?: string
+  variant?: string
+  year?: number
+  url?: string
+  licence?: string
+  licence_url?: string
+  citation?: string
+  retrieved?: string
+}
+
+export interface AtlasData {
+  model_version: string
+  /** How the numbers were produced, in the artifact's own words. */
+  derived_by: string
+  sources: AtlasSource[]
+  countries: AtlasCountry[]
+}

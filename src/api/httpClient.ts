@@ -5,6 +5,8 @@
 // the web's view types (src/api/types.ts). This is the seam the mock also implements, so pages and hooks
 // are identical against either.
 
+import type { AtlasData } from './types'
+
 import type { ApiClient } from './client'
 import { EVIDENCE_GRADES } from './types'
 import type {
@@ -267,6 +269,12 @@ export function createHttpClient(): ApiClient {
       const green = res.breakdown.greenspace_delta_years
       const explanation = `Air quality accounts for ${air >= 0 ? '+' : ''}${air.toFixed(1)} yr and greenspace ${green >= 0 ? '+' : ''}${green.toFixed(1)} yr of the difference. ${res.note}`
       return { current, candidate, delta_years: res.delta_years, explanation }
+    },
+
+    async getAtlas(): Promise<AtlasData> {
+      // No auth header: this is population data, and the service serves it identically to everyone.
+      // Sending a token would only invite a cache keyed on who asked.
+      return get<AtlasData>('/atlas')
     },
 
     async getStats(): Promise<CohortStat[]> {
