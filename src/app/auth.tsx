@@ -21,7 +21,8 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
-const SESSION_KEY = 'clock-of-life.session'
+/** Exported so the test harness can seed a session the way a reload finds one, and not a key apart. */
+export const SESSION_KEY = 'clock-of-life.session'
 
 function readStored(): Session | null {
   try {

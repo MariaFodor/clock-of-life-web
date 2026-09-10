@@ -2,6 +2,7 @@
 
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { useRestoring } from '../app/restore'
 
 export function PageHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -56,6 +57,11 @@ export function ErrorState({ message }: { message: string }) {
 
 /** Shown on any surface reached before the interview has produced a profile. */
 export function NeedsProfile() {
+  // A saved Life Clock takes a moment to arrive. Saying "you haven't calculated one" while it is
+  // still on its way is the reload bug itself (UX-3) — so every surface waits here, once, rather
+  // than each remembering to.
+  const restoring = useRestoring()
+  if (restoring) return <Loading label="Looking for your saved Life Clock…" />
   return (
     <Card>
       <p className="text-sm text-clock-ink">

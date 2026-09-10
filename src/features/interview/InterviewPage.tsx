@@ -1,15 +1,18 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useEstimate, useMeta, usePlaces, useSaveAnswers } from '../../api/hooks'
+import { useAnswers, useEstimate, useMeta, usePlaces, useSaveAnswers } from '../../api/hooks'
 import { getClient } from '../../api/client'
+import { useAuth } from '../../app/auth'
 import { useProfile } from '../../app/profile'
-import { PageHeader, Card, ErrorState } from '../../components/ui'
+import { PageHeader, Card, ErrorState, Loading, NoticeState } from '../../components/ui'
 import { MoodSupportNote, StatisticalEstimateNote } from '../../components/framing'
 import {
   SECTIONS,
+  COUNTRY_API_CODE,
   DEFAULT_ANSWERS,
   buildProfile,
   answersForApi,
+  answersFromApi,
   isVisible,
   moodScore,
   type Answers,
@@ -17,6 +20,9 @@ import {
   type LocationAnswer,
   type Question,
 } from './questionnaire'
+
+const TITLE = 'Your interview'
+const SUBTITLE = 'A few questions about you. You can change any answer and recalculate at any time.'
 
 /** One sub-item per row, all sharing the question's response scale; the answer is a number array. */
 function BatteryField({
@@ -298,8 +304,26 @@ function Field({
   )
 }
 
-export function InterviewPage() {
-  const [answers, setAnswers] = useState<Answers>(DEFAULT_ANSWERS)
+/**
+ * The interview itself, mounted only once its starting answers are known.
+ *
+ * Separate from the loading of those answers on purpose: a prefill applied after mount would land on
+ * top of whatever the reader had already started typing.
+ */
+function InterviewForm({
+  initialAnswers,
+  initialLoadFailed,
+}: {
+  initialAnswers: Answers
+  initialLoadFailed: boolean
+}) {
+  const [answers, setAnswers] = useState<Answers>(initialAnswers)
+  // Frozen for the same reason as the answers above, and at the same instant. The notice describes
+  // the fields as they were filled in, so it has to be settled when they are: rendered from the live
+  // query it appeared over the reader's own restored answers when a background refetch failed, and
+  // disappeared — leaving no warning at all — when a later one succeeded while every field still
+  // held a standard answer, which is the reader calculating from somebody else's values unwarned.
+  const [loadFailed] = useState(initialLoadFailed)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const navigate = useNavigate()
   const { setProfile, setEstimate } = useProfile()
@@ -362,10 +386,13 @@ export function InterviewPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Your interview"
-        subtitle="A few questions about you. You can change any answer and recalculate at any time."
-      />
+      <PageHeader title={TITLE} subtitle={SUBTITLE} />
+
+      {loadFailed && (
+        <div className="mb-5">
+          <NoticeState message="We could not load the answers you saved before, so the questions below start from the standard values instead of yours. Nothing you saved is lost — reload the page to try again." />
+        </div>
+      )}
 
       <div className="space-y-5">
         {SECTIONS.map((section) => (
@@ -442,5 +469,50 @@ export function InterviewPage() {
         <StatisticalEstimateNote />
       </div>
     </div>
+  )
+}
+
+/**
+ * Starts the interview from the answers already saved (UX-3), so editing one thing does not mean
+ * answering everything again. `DEFAULT_ANSWERS` underlies whatever was never saved.
+ */
+export function InterviewPage() {
+  const { session } = useAuth()
+  const saved = useAnswers(Boolean(session))
+  // The country list the saved country is restored against. Already on its way — the picker below
+  // reads the same query — so asking for it here costs nothing but the wait.
+  const meta = useMeta()
+  const rows = saved.data
+  // Height and weight have no seeded question row yet (REVIEW-2026-09-09 W1/S8), so they alone
+  // cannot come back — they stay at their defaults. Harmless to the estimate: the service accepts
+  // `bmi` and never scores it (scoring.rs `bmi_is_accepted_but_never_scored`, after REFIT-01).
+  const restored = useMemo(
+    () =>
+      answersFromApi(rows ?? [], {
+        options: meta.data?.country_options ?? [],
+        aliases: meta.data?.country_aliases,
+      }),
+    [rows, meta.data],
+  )
+
+  // Wait for them rather than mounting on defaults and swapping underneath the reader. The country
+  // list is waited for only when a country was actually saved, because that is the only answer that
+  // needs it: a first-time visitor still gets the questions immediately, with the picker loading its
+  // own options in place, exactly as before.
+  const savedCountry = (rows ?? []).some((r) => r.question_code === COUNTRY_API_CODE)
+  if ((session && saved.isPending) || (savedCountry && meta.isPending)) {
+    return (
+      <div>
+        <PageHeader title={TITLE} subtitle={SUBTITLE} />
+        <Loading label="Loading your saved answers…" />
+      </div>
+    )
+  }
+
+  return (
+    <InterviewForm
+      initialAnswers={{ ...DEFAULT_ANSWERS, ...restored }}
+      initialLoadFailed={saved.isError}
+    />
   )
 }
