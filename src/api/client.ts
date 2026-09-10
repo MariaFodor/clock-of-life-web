@@ -3,7 +3,7 @@
 // Every network call goes through this interface. Today it is backed by `mockClient`; when the generated
 // OpenAPI client lands, only `provideClient`/the default export changes — pages and hooks are untouched.
 
-import type { AtlasData, AtlasEnvironment } from './types'
+import type { AtlasData, AtlasEnvironment, CountryPlaces } from './types'
 
 import type {
   AnswerInput,
@@ -57,6 +57,15 @@ export interface ApiClient {
    * when a reader switches the layer on — it is several times the size of the country table.
    */
   getEnvironment(): Promise<AtlasEnvironment>
+
+  /**
+   * The measured settlements in ONE country, for the interview's city question.
+   *
+   * Per country rather than the whole list: `listLocations()` returns all 3,521 seeded settlements
+   * with no country filter, which is why the relocate surface used to offer a German reader seven
+   * Romanian cities. A picker must only ever offer places in the country the reader just named.
+   */
+  getPlaces(iso3: string): Promise<CountryPlaces>
 }
 
 let active: ApiClient | null = null

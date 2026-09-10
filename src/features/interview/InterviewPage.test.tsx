@@ -35,10 +35,25 @@ describe('<InterviewPage/>', () => {
     expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeDisabled()
   })
 
+  it('will not calculate until it knows which country, and says why', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+
+    // Blocked, and the reason is on screen: without a country the estimate would count down from
+    // somebody else's national death rates. It used to send `country: 'RO'` for everyone instead.
+    const button = screen.getByRole('button', { name: /calculate my life clock/i })
+    expect(button).toBeDisabled()
+    expect(await screen.findByText(/would be about somewhere else/i)).toBeInTheDocument()
+
+    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'DE')
+    expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeEnabled()
+  })
+
   it('calculates and navigates to the Life Clock on submit', async () => {
     const user = userEvent.setup()
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
 
+    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
     await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
     expect(await screen.findByText('LIFE CLOCK HOME')).toBeInTheDocument()
   })
@@ -76,9 +91,36 @@ describe('LEV-04 additions', () => {
     expect(await screen.findByText(/feeling low lately/i)).toBeInTheDocument()
   })
 
-  it('offers the location picker from /api/locations', async () => {
+  it('asks which country FIRST, from the model\'s own list', async () => {
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
-    expect(await screen.findByLabelText(/where do you live/i)).toBeInTheDocument()
+    const picker = await screen.findByLabelText(/which country do you live in/i)
+    expect(picker).toBeInTheDocument()
+    // The options are the countries the model can SCORE, so the picker cannot offer one that will be
+    // refused at the end. Until this shipped there was no country question at all and every profile
+    // was sent as RO.
+    expect(within(picker as HTMLSelectElement).getByRole('option', { name: 'Romania' })).toBeInTheDocument()
+    expect(within(picker as HTMLSelectElement).getByRole('option', { name: 'Germany' })).toBeInTheDocument()
+  })
+
+  it('refuses to offer a city until a country is chosen', async () => {
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+    // The city list is a list of places IN a country. Offering it unfiltered is how the relocate
+    // surface came to show a German reader seven Romanian cities.
+    expect(await screen.findByText(/choose your country first/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/which city or town/i)).not.toBeInTheDocument()
+  })
+
+  it('offers only that country\'s measured settlements once one is chosen', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+    const picker = await screen.findByLabelText(/which country do you live in/i)
+    await user.selectOptions(picker, 'RO')
+    const cities = await screen.findByLabelText(/which city or town/i)
+    const options = within(cities as HTMLSelectElement).getAllByRole('option')
+    // Every option is a real settlement with its reading and the year it was taken — never a bare
+    // name, because a value with no year is indistinguishable from an invented one.
+    expect(options.length).toBeGreaterThan(10)
+    expect(options.slice(1).every((o) => /µg\/m³ \(20\d\d\)/.test(o.textContent ?? ''))).toBe(true)
   })
 })
 
@@ -103,22 +145,29 @@ describe('LEV-04 failure paths', () => {
       { route: '/interview', client },
     )
 
-    const picker = await screen.findByLabelText(/where do you live/i)
-    await user.selectOptions(picker, 'Cluj-Napoca')
+    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    const cities = await screen.findByLabelText(/which city or town/i)
+    // A real WHO settlement, not the invented "Cluj-Napoca" row this test used to pick.
+    await user.selectOptions(cities, 'Bucuresti')
     await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
 
     // The estimate still lands (the ENV term already reached it) — the failure must not trap the
     // user — and the honest message travels with them instead of vanishing.
-    expect(await screen.findByText(/could not record Cluj-Napoca as your home location/i)).toBeInTheDocument()
+    expect(await screen.findByText(/could not record Bucuresti as your home location/i)).toBeInTheDocument()
   })
 
   it('explains itself when the location list cannot be loaded', async () => {
     const client = createMockClient()
-    client.listLocations = async () => {
+    const user = userEvent.setup()
+    client.getPlaces = async () => {
       throw new Error('offline')
     }
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview', client })
-    expect(await screen.findByText(/could not load the list of locations/i)).toBeInTheDocument()
+    const picker = await screen.findByLabelText(/which country do you live in/i)
+    await user.selectOptions(picker, 'RO')
+    // 152 of the 237 countries have no measurement since 2020, so this path is a fact about the data
+    // as often as it is a fault — and it says which, rather than reading as a broken app.
+    expect(await screen.findByText(/has had its air measured since 2020/i)).toBeInTheDocument()
     // and it never blocks the estimate
     expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeEnabled()
   })
