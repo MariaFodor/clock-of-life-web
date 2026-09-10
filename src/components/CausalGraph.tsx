@@ -115,7 +115,7 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
           <defs>
             <marker id="cg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4"
                     markerHeight="4" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-clock-line/40" />
+              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-clock-muted/55" />
             </marker>
             <marker id="cg-arrow-lit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5"
                     markerHeight="5" orient="auto-start-reverse">
@@ -145,10 +145,17 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
                 markerEnd={focus && on ? 'url(#cg-arrow-lit)' : 'url(#cg-arrow)'}
                 className={
                   focus && on ? 'stroke-clock-brand'
-                  : focus ? 'stroke-clock-line/10'
-                  : 'stroke-clock-line/30'
+                  : focus ? 'stroke-clock-line/20'
+                  // At rest the arrows ARE the content — they carry the mediation claim this whole
+                  // drawing exists to make. `clock-line` is a hairline token tuned for card borders:
+                  // in dark mode it is rgb(38,48,60) at 30% over a rgb(15,20,27) canvas, which
+                  // composites to about rgb(22,28,37). Against that background, at 0.8px, the graph
+                  // rendered as a list of chips in columns and nobody could see an edge until they
+                  // hovered. `clock-muted` is a TEXT token, so it is legible on the canvas by
+                  // definition, in both themes.
+                  : 'stroke-clock-muted/45'
                 }
-                strokeWidth={focus && on ? 1.6 : 0.8}
+                strokeWidth={focus && on ? 1.8 : 1.1}
               />
             )
           })}
