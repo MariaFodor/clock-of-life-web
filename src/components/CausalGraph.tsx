@@ -30,7 +30,7 @@ const LABELS: Record<string, string> = {
  * Longest-path layering: a node sits one column right of its furthest-upstream cause.
  *
  * Grouping columns by ROLE instead looks tidier and is a lie — against the real ontology it buries
- * 14 edges inside a single column (every `diet -> waist`, `activity -> waist`, `education -> income`)
+ * 10 edges inside a single column (every `diet -> waist`, `activity -> waist`, `education -> income`)
  * and sends 11 more backwards, including smoking to heart history. Those are exactly the mediation
  * paths this drawing exists to show. Depth is computed from the graph, so every arrow points forward
  * by construction and the picture cannot contradict the model.
@@ -115,7 +115,9 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
           <defs>
             <marker id="cg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4"
                     markerHeight="4" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-clock-line/40" />
+              {/* Matched to the edge: a head at a lower alpha than its line reads as a fading
+                  arrow, and at 55% it was 2.22:1 in light mode — under the bar the line now clears. */}
+              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-clock-muted" />
             </marker>
             <marker id="cg-arrow-lit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5"
                     markerHeight="5" orient="auto-start-reverse">
@@ -145,10 +147,21 @@ export function CausalGraph({ ontology }: { ontology: Ontology }) {
                 markerEnd={focus && on ? 'url(#cg-arrow-lit)' : 'url(#cg-arrow)'}
                 className={
                   focus && on ? 'stroke-clock-brand'
-                  : focus ? 'stroke-clock-line/10'
-                  : 'stroke-clock-line/30'
+                  : focus ? 'stroke-clock-line/20'
+                  // At rest the arrows ARE the content — they carry the mediation claim this whole
+                  // drawing exists to make. `clock-line` is a hairline tuned for card borders: at
+                  // 30% over this Card's own `clock-surface` (rgb(23,30,39) dark) it composites to
+                  // rgb(28,35,45), a contrast ratio of 1.06:1, at 0.8px. The graph rendered as a
+                  // list of chips in columns and no edge was visible until you hovered.
+                  //
+                  // Full opacity, not a diluted one. WCAG 1.4.11 asks 3:1 of a graphical object you
+                  // need in order to understand the content, which these are; muted at 45% gives
+                  // 2.47:1 dark and 1.89:1 light, so it clears neither. At 100% it is 6.93:1 and
+                  // 5.25:1 — the same legibility the token already earns as body text, which is the
+                  // whole reason for borrowing it. LifeClock's arc does the same thing.
+                  : 'stroke-clock-muted'
                 }
-                strokeWidth={focus && on ? 1.6 : 0.8}
+                strokeWidth={focus && on ? 1.8 : 1.1}
               />
             )
           })}
