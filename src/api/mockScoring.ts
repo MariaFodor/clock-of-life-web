@@ -6,6 +6,9 @@
 // structure means the mock produces sensible, monotonic What-If deltas and honest "Why?" attributions.
 
 import type { Attribution, EvidenceGrade, FactorRole, Profile, WhatIfChanges } from './types'
+import { effectiveCigsDay, REDUCTION_NOTE, SMOKER_MEAN_CIGS } from './modelRules'
+
+export { effectiveCigsDay, REDUCTION_NOTE, SMOKER_MEAN_CIGS }
 
 const round1 = (x: number) => Math.round(x * 10) / 10
 
@@ -118,7 +121,7 @@ function design(p: Profile): Record<string, number> {
     sleep_long: p.sleep >= 8.5 ? 1 : 0,
     waist: z(p.waist, 'waist'),
     bmi: z(p.bmi, 'bmi'),
-    cigs_day: z(p.smoke === 2 ? (p.cigs_day ?? 0) : 0, 'cigs_day'),
+    cigs_day: z(effectiveCigsDay(p), 'cigs_day'),
     // Real reading if known, else derived from the high-BP answer (matches scoring.rs).
     sbp: z(p.sbp ?? (p.high_bp ? 132.7 : 117.9), 'sbp'),
     diabetes: p.diabetes ? 1 : 0,
@@ -228,7 +231,32 @@ export function scoreWhatIf(base: Profile, changes: WhatIfChanges): WhatIfResult
     }
   }
   if (changes.pa_min !== undefined) modified.pa_min = changes.pa_min
-  if (changes.sleep !== undefined) modified.sleep = changes.sleep
+  if (changes.cigs_day !== undefined) {
+    if (changes.cigs_day < 0 || changes.cigs_day > 80) {
+      throw new Error('cigarettes per day must be between 0 and 80')
+    }
+    // Mirrors the service: a current smoker's zero is "did not answer", not "quit", so it is
+    // refused rather than scored at the imputed average. The mock has to refuse what the service
+    // refuses or the dev harness disagrees with production about which scenarios exist at all.
+    if (changes.cigs_day === 0 && modified.smoke === 2) {
+      throw new Error(
+        'smoking zero cigarettes a day is quitting, and quitting is modelled by the smoking ' +
+          'lever rather than the dose one: set smoking to never instead.',
+      )
+    }
+    modified.cigs_day = changes.cigs_day
+    // Same honesty the service applies: the per-cigarette gradient is the optimistic reading of
+    // cutting down, and must never present itself as equivalent to stopping.
+    // Against the EFFECTIVE dose, matching the service: an undeclared smoker is scored at the
+    // cohort mean, and a former smoker's effective dose is 0, so a former smoker resuming can never
+    // come in under it. One comparison fixes both — an explicit base.smoke check was decoration.
+    const baseDose = effectiveCigsDay(base)
+    if (modified.smoke === 2 && changes.cigs_day < baseDose) {
+      note = REDUCTION_NOTE
+    }
+  }
+  // Quitting zeroes the dose, matching how the score treats a non-smoker's cigarettes.
+  if (modified.smoke !== 2) modified.cigs_day = 0
   if (changes.waist !== undefined) modified.waist = changes.waist
   if (changes.diet_score !== undefined) modified.diet_score = changes.diet_score
   if (changes.alcohol !== undefined) modified.alcohol = changes.alcohol

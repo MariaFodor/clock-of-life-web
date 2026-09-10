@@ -64,11 +64,19 @@ export interface Estimate {
   calculation_id: string
 }
 
-/** Levers that What-If may change (scoring.rs `WhatIfChanges`). Only modifiable factors. */
+/** Levers that What-If may change (scoring.rs `WhatIfChanges`). Only modifiable factors.
+ *
+ *  `sleep` is deliberately absent, though the wire format still accepts an UNCHANGED one for older
+ *  clients: ONT-01 demoted long sleep to a marker, and the service refuses a sleep change with a
+ *  400. Leaving the field here is an open invitation to build a control the backend rejects, which
+ *  is exactly what happened. */
 export interface WhatIfChanges {
   smoke?: SmokeStatus
   pa_min?: number
-  sleep?: number
+  /** Cigarettes per day (0-80, matching what the service validates a profile at). A lever in its own right since bundle v3.0.1, where the corrected
+   *  smoking contrast moved the dose into its own coefficient — the breakdown charges for it, so
+   *  What-If has to let people ask about it. */
+  cigs_day?: number
   waist?: number
   diet_score?: number
   alcohol?: 'none' | 'light' | 'moderate' | 'heavy'

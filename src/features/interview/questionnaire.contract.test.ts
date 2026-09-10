@@ -79,6 +79,23 @@ describe('aggregation formulas (LEV-04)', () => {
     expect(stressScore({ STRESS: [2, 2, 2] })).toBeUndefined() // incomplete battery
   })
 
+  // The clamp briefly stood at 60, to match a What-If bound that has since moved to 80 — which
+  // recorded a 75-a-day smoker as smoking 60, silently, and changed their estimate. Both halves are
+  // pinned: what we keep, and that we say something when we cannot keep it.
+  it("keeps a heavy smoker's real answer, and speaks up when it cannot", () => {
+    const smoker = { ...DEFAULT_ANSWERS, SMK: 'current' as const }
+    expect(buildProfile({ ...smoker, CIGS: 75 }).profile.cigs_day).toBe(75)
+    expect(buildProfile({ ...smoker, CIGS: 75 }).errors).toEqual([])
+    expect(buildProfile({ ...smoker, CIGS: 80 }).profile.cigs_day).toBe(80)
+
+    const tooMany = buildProfile({ ...smoker, CIGS: 100 })
+    expect(tooMany.profile.cigs_day).toBe(80)
+    expect(tooMany.errors.join(' ')).toMatch(/cigarettes per day/i)
+
+    // A former smoker's dose is not scored, so it is not carried.
+    expect(buildProfile({ ...DEFAULT_ANSWERS, SMK: 'former', CIGS: 40 }).profile.cigs_day).toBe(0)
+  })
+
   it('maps the levers into the profile only when answered', () => {
     const base = buildProfile(DEFAULT_ANSWERS).profile
     expect(base.diet_score).toBeUndefined()

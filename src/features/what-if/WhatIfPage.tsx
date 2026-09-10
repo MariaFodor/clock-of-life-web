@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useProfile } from '../../app/profile'
 import { useWhatIf } from '../../api/hooks'
+import { effectiveCigsDay } from '../../api/modelRules'
 import type { SmokeStatus, WhatIf, WhatIfChanges } from '../../api/types'
-import { PageHeader, Card, NeedsProfile } from '../../components/ui'
+import { PageHeader, Card, NeedsProfile, ErrorState } from '../../components/ui'
 import { StatisticalEstimateNote } from '../../components/framing'
 import { fmtDelta, fmtYears, deltaTone } from '../../components/format'
 
@@ -15,11 +16,17 @@ interface SavedScenario {
 }
 
 /** A short human summary of which levers a scenario changed. */
-function summarizeChanges(changes: WhatIfChanges): string {
+function summarizeChanges(changes: WhatIfChanges, baseSmoke: SmokeStatus): string {
   const parts: string[] = []
   if (changes.smoke !== undefined) parts.push(`smoking → ${SMOKE_LABEL[changes.smoke]}`)
   if (changes.pa_min !== undefined) parts.push(`activity → ${changes.pa_min.toFixed(0)} MET-min`)
-  if (changes.sleep !== undefined) parts.push(`sleep → ${changes.sleep.toFixed(1)} h`)
+  // Only while the scenario still smokes: "smoking → Never, 5 cigarettes/day" describes nobody, and
+  // the service zeroes the dose on quitting anyway. The base status is passed in rather than
+  // defaulted to "current": defaulting is only correct while the dose slider renders exclusively
+  // for smokers, which is a fact about another function.
+  if (changes.cigs_day !== undefined && (changes.smoke ?? baseSmoke) === 2) {
+    parts.push(`${changes.cigs_day.toFixed(0)} cigarettes/day`)
+  }
   if (changes.waist !== undefined) parts.push(`waist → ${changes.waist.toFixed(0)} cm`)
   return parts.length ? parts.join(', ') : 'no change'
 }
@@ -39,22 +46,77 @@ export function WhatIfPage() {
     )
   }
 
+  // The SCENARIO's smoking status, not the profile's — one name for it, read by everything here.
+  // A former smoker who switches to Current is scored at the smokers' mean from that moment, so the
+  // row has to say so too; reading the profile's status showed them a dose of 0 while the model
+  // used 12.18. Two names for this one status is how that happened, so there is only one.
   const smoke = changes.smoke ?? profile.smoke
   const pa = changes.pa_min ?? profile.pa_min
-  const sleep = changes.sleep ?? profile.sleep
   const waist = changes.waist ?? profile.waist
 
-  const run = () => whatif.mutate({ base: profile, changes })
+  // Seeded from the EFFECTIVE dose, not the raw field. A current smoker who never answered the dose
+  // question stores 0, and the model scores them at the cohort's smoker mean — so seeding from the
+  // field left the row reading "0" while the slider's floor pinned the thumb to 1, and then
+  // congratulated them for "cutting down" when they dragged it up to 5. The service compares
+  // effective doses for exactly this reason; the control has to start from the same number, or it
+  // argues with the answer it produces.
+  //
+  // ceil, not round: 12.18 rounds DOWN to 12, which sits below the effective dose, so the seed
+  // itself read as a reduction. ceil is not free either — 13 sits above it, and submitting the seed
+  // would charge 0.1 years for standing still. That is why `submitted()` below drops the field
+  // instead; the rounding only decides which way the phantom would have pointed.
+  const seedDose = Math.ceil(effectiveCigsDay({ smoke, cigs_day: profile.cigs_day }))
+  const cigs = changes.cigs_day ?? seedDose
+  /** The seed is a number we chose, not one they gave us — say so on the row. */
+  const imputedDose = smoke === 2 && !profile.cigs_day && cigs === seedDose
+
+  // Dragging the dose away and back to where it started is not a change, and must not be priced as
+  // one. The slider is integer while the effective dose need not be, so the seed does not
+  // round-trip: 12 came in under an imputed 12.18 and got a "cutting down" note on a no-op, 13 sits
+  // above it and costs a phantom 0.1 years in red. Neither rounding fixes that — dropping the field
+  // does. What the user did was nothing, so nothing is what we send.
+  //
+  // Not gated on the dose being imputed. The precondition is "the integer seed is not the effective
+  // dose", and an imputed 12.18 is only one way to get there — a DECLARED 12.5 is another, and it
+  // is reachable, because the interview's number field takes decimals. Gating on `imputedDose` left
+  // that door open, which is the fifth entry point this same defect has been found at.
+  //
+  // Compared against `seedDose`, NOT against `cigs`: `cigs` IS `changes.cigs_day` the moment the
+  // slider is touched, so comparing to it is a tautology that dropped EVERY dose change and left
+  // the lever inert for exactly the smokers this page added it for.
+  const submitted = (): WhatIfChanges =>
+    changes.cigs_day === seedDose ? { ...changes, cigs_day: undefined } : changes
+
+  const run = () => whatif.mutate({ base: profile, changes: submitted() })
   const reset = () => {
     setChanges({})
     whatif.reset()
   }
+  /** A stable serialization, so a comparison cannot turn on key order. */
+  const asKey = (c: WhatIfChanges) =>
+    JSON.stringify(Object.entries(c).filter(([, v]) => v !== undefined).sort())
+
+  /** True once the sliders have moved away from the scenario that produced the shown result. */
+  const stale = Boolean(whatif.data) && asKey(submitted()) !== asKey(whatif.variables?.changes ?? {})
+
   const save = () => {
-    if (!whatif.data) return
-    setScenarios((prev) => [...prev, { id: Date.now(), summary: summarizeChanges(changes), result: whatif.data! }])
+    if (!whatif.data || !whatif.variables) return
+    // The summary describes the scenario that was PRICED, not wherever the sliders happen to sit.
+    // Reading live state here paired one row's label with another row's number: drag to 5, run,
+    // drag on to 20 without re-running, save — and the board reported "20 cigarettes/day · best ·
+    // +1.3 yr" for a change actually worth -0.6. Sign inverted, magnitude wrong, badge attached.
+    // useMutation already keeps the payload that produced this answer; use it.
+    setScenarios((prev) => [...prev, {
+      id: Date.now(),
+      summary: summarizeChanges(whatif.variables!.changes, profile.smoke),
+      result: whatif.data!,
+    }])
   }
 
-  // Best = the largest gain in years (ties broken by insertion order).
+  // Best = the largest gain in years. Ties are NOT broken — every row holding the maximum is badged,
+  // which is honest and is reachable: quitting and becoming a former smoker price identically,
+  // because the service maps any reduction in smoking to the never-smoker contrast. (This comment
+  // used to claim insertion order broke them. It does not, and never did.)
   const bestDelta = scenarios.length ? Math.max(...scenarios.map((s) => s.result.delta_years)) : null
 
   return (
@@ -94,14 +156,39 @@ export function WhatIfPage() {
             display={`${pa.toFixed(0)}`}
             onChange={(v) => setChanges((c) => ({ ...c, pa_min: v }))}
           />
-          <SliderRow
+          {/* Only a current smoker has a dose to change, and only then does the model score one.
+              Showing the slider to a never-smoker would invite a question whose answer is always
+              zero. */}
+          {smoke === 2 && (
+            <SliderRow
+              label="Cigarettes per day"
+              // Not zero: the service refuses a zero dose from a current smoker, because the model
+              // reads it as "did not answer" and scores it at the average smoker's consumption —
+              // which made cutting to zero worth LESS than cutting to one. Quitting is the smoking
+              // button above, and it is the honest way to ask that question.
+              min={1}
+              max={80}
+              step={1}
+              value={cigs}
+              // Say so when the number is ours rather than theirs: this person never told us, and a
+              // bare "12" would read back as something they had reported.
+              display={imputedDose ? `${cigs.toFixed(0)} (assumed)` : `${cigs.toFixed(0)}`}
+              onChange={(v) => setChanges((c) => ({ ...c, cigs_day: v }))}
+            />
+          )}
+          {/* Sleep was a slider here until the model demoted long sleep to a MARKER: illness causes
+              long sleep far more than the reverse, so "sleep less" is advice with no evidence behind
+              it, and the service now refuses the change. Deleting the row outright would have been
+              the easy fix and the wrong one — sleep still moves the estimate and still appears in
+              the breakdown, so hiding it here would look like the model stopped caring. It stays
+              visible and says why it cannot be simulated. */}
+          <MarkerRow
             label="Sleep (hours/night)"
-            min={3}
-            max={12}
-            step={0.5}
-            value={sleep}
-            display={`${sleep.toFixed(1)} h`}
-            onChange={(v) => setChanges((c) => ({ ...c, sleep: v }))}
+            display={`${profile.sleep.toFixed(1)} h`}
+            reason={
+              'Long sleep is a marker of illness rather than a cause of it, so there is no ' +
+              'evidenced effect of changing it to simulate. It still counts in your breakdown.'
+            }
           />
           <SliderRow
             label="Waist (cm)"
@@ -124,9 +211,24 @@ export function WhatIfPage() {
         </div>
       </Card>
 
+      {/* The service refuses some scenarios with a reason — a sleep change, an implausible dose.
+          Until now the page had no error branch at all: a rejection just flipped the button back
+          from "Simulating…" and showed nothing, which is why the sleep slider could 400 for
+          however long without anyone noticing. A refusal is an answer and belongs on screen. */}
+      {whatif.isError && <ErrorState message={(whatif.error as Error).message} />}
+
       {whatif.data && (
         <Card className="mt-5">
-          <div className="grid grid-cols-3 items-center gap-4 text-center">
+          {/* The card outlives the sliders that produced it. Saying so is the difference between a
+              stale number and a wrong one: without this, a person reads the sliders in front of
+              them and the years underneath them as one statement. */}
+          {stale && (
+            <p role="status" className="mb-3 rounded-lg bg-clock-warn/5 p-2 text-xs text-clock-warn">
+              These years are for the scenario you last calculated, not the one on the sliders now.
+              Choose “See the effect” again to price this one.
+            </p>
+          )}
+          <div className={`grid grid-cols-3 items-center gap-4 text-center ${stale ? 'opacity-50' : ''}`}>
             <div>
               <div className="text-xs text-clock-muted">now</div>
               <div className="text-xl font-semibold text-clock-ink">{fmtYears(whatif.data.current_years)}</div>
@@ -207,6 +309,24 @@ export function WhatIfPage() {
           </table>
         </Card>
       )}
+    </div>
+  )
+}
+
+/** A factor the estimate uses but What-If must not offer: shown, valued, and explained. */
+function MarkerRow({ label, display, reason }: { label: string; display: string; reason: string }) {
+  // Deliberately not a disabled input: a dimmed control announces itself as something you failed to
+  // use. This is text. The group + label ties the three nodes together so the reason is heard as
+  // belonging to the value, since the dashed border that conveys that visually says nothing at all.
+  const labelId = `marker-${label.replace(/\W+/g, '-').toLowerCase()}`
+  return (
+    <div role="group" aria-labelledby={labelId}
+         className="rounded-lg border border-dashed border-clock-line p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <span id={labelId} className="label text-clock-muted">{label}</span>
+        <span className="text-sm font-medium text-clock-muted">{display}</span>
+      </div>
+      <p className="text-xs text-clock-muted">{reason}</p>
     </div>
   )
 }

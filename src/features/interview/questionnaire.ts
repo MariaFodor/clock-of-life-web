@@ -330,7 +330,18 @@ export function buildProfile(a: Answers): ProfileDraft {
 
   const smoke = a.SMK === 'current' ? 2 : a.SMK === 'former' ? 1 : 0
   // Current-smoker dose only: former/never smoke 0/day now (matches the model's cigs_day encoding).
-  const cigs_day = smoke === 2 ? Math.min(Math.max(num(a.CIGS) || 0, 0), 80) : 0
+  // 80, matching what the service validates a profile at AND what its What-If lever now accepts.
+  // This briefly clamped to 60 to match the lever, which resolved the contradiction by discarding
+  // what a 75-a-day smoker actually told us — silently, and it changed their estimate. The lever
+  // moved to 80 instead.
+  // And it SAYS so rather than clamping quietly: six lines below, an out-of-range blood pressure
+  // gets a visible error, while this discarded a "100 a day" answer without a word. Whatever we
+  // think of the number, silently rewriting what someone told us about themselves is the habit this
+  // whole change set has been arguing against.
+  const cigsRaw = smoke === 2 ? Math.max(num(a.CIGS) || 0, 0) : 0
+
+  if (cigsRaw > 80) errors.push('Cigarettes per day must be 80 or fewer.')
+  const cigs_day = Math.min(cigsRaw, 80)
 
   // Systolic BP is optional: only sent when the user gives a plausible reading; otherwise the service
   // derives it from the high-blood-pressure answer, so a blank field is never a wasted question.
