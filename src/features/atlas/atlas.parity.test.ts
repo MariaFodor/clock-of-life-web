@@ -6,27 +6,36 @@
 // pins it against the bundle the service loads, so the next bundle bump fails here rather than in a
 // reader's browser.
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import fixture from './atlas.fixture.json'
 
-// Resolved relative to this file, not from a hardcoded version literal — the sibling parity test
-// documents why: a pinned version string rots at the next bundle.
+// Resolved relative to THIS file. Four levels up, not three: this file sits at
+// src/features/atlas, one deeper than src/api/mockScoring.parity.test.ts, whose three-level idiom was
+// copied here without adjusting. Three landed on clock-of-life-web/clock-of-life-service — a path that
+// exists in no checkout — so `manifest()` returned null and every assertion below it silently
+// returned. Proven by tamper: a fixture declaring model_version "9.9.9" and an invented country code
+// passed 4/4 for as long as the guard has existed.
 const here = dirname(fileURLToPath(import.meta.url))
-const serviceDir = join(here, '..', '..', '..', 'clock-of-life-service')
+const serviceDir = join(here, '..', '..', '..', '..', 'clock-of-life-service')
 
-function manifest(): { version: string; countries: string[]; reference_countries: string[] } | null {
+/** SHA-256/16 of the manifest's checksum map — changes whenever any file in the bundle does. */
+function bundleStamp(manifest: { checksums: Record<string, string> }): string {
+  const ordered = Object.fromEntries(Object.entries(manifest.checksums).sort(([a], [b]) => a.localeCompare(b)))
+  return createHash('sha256').update(JSON.stringify(ordered)).digest('hex').slice(0, 16)
+}
+
+function manifest(): { version: string; countries: string[]; reference_countries: string[]; checksums: Record<string, string> } {
   const bundles = join(serviceDir, 'bundle')
-  try {
-    const { readdirSync } = require('node:fs') as typeof import('node:fs')
-    const dir = readdirSync(bundles).filter((d) => d.startsWith('model-v')).sort().pop()
-    if (!dir) return null
-    return JSON.parse(readFileSync(join(bundles, dir, 'manifest.json'), 'utf8'))
-  } catch {
-    return null // the service repo is not checked out beside this one
-  }
+  // THROWS rather than returning null. The sibling guard states the principle this file failed to
+  // copy: "a drift guard that needs manual updating to keep working is a drift guard that stops
+  // working." A missing service checkout must be a loud failure, not a quiet pass.
+  const dir = readdirSync(bundles).filter((d) => d.startsWith('model-v')).sort().pop()
+  if (!dir) throw new Error(`no model bundle under ${bundles}`)
+  return JSON.parse(readFileSync(join(bundles, dir, 'manifest.json'), 'utf8'))
 }
 
 describe('the atlas fixture', () => {
@@ -46,12 +55,32 @@ describe('the atlas fixture', () => {
 
   it('matches the bundle the service loads', () => {
     const m = manifest()
-    if (!m) return // nothing to compare against; the checks above still hold
     expect(fixture.model_version).toBe(m.version)
     expect(new Set(fixture.countries.map((c) => c.iso2)))
       .toEqual(new Set(m.reference_countries))
     expect(new Set(fixture.countries.filter((c) => c.scoreable).map((c) => c.iso2)))
       .toEqual(new Set(m.countries))
+  })
+
+  it('was generated from the bundle that is vendored right now', () => {
+    // The set comparisons above catch a country appearing or disappearing. They cannot catch the
+    // numbers moving: an auditor shifted 235 countries by +0.4 yr and the whole suite stayed green.
+    // Stamping the fixture with a digest of the bundle's own checksum map closes that — any change to
+    // any file in the bundle turns this red until someone regenerates from the service.
+    expect(fixture._bundle?.version).toBe(manifest().version)
+    expect(fixture._bundle?.checksums_sha256_16).toBe(bundleStamp(manifest()))
+  })
+
+  it('has not been edited by hand since it was generated', () => {
+    // The stamp above catches "the bundle moved and nobody regenerated". This catches the other
+    // direction: a number changed in this file while the bundle stood still. Together they mean the
+    // fixture is either what the service served, or red.
+    const own = createHash('sha256')
+      .update(JSON.stringify({ model_version: fixture.model_version, derived_by: fixture.derived_by,
+                               sources: fixture.sources, countries: fixture.countries }))
+      .digest('hex')
+      .slice(0, 16)
+    expect(fixture._bundle?.fixture_sha256_16).toBe(own)
   })
 
   it('agrees with the boundaries on which countries can be drawn', async () => {
