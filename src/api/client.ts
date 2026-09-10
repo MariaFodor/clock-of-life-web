@@ -3,7 +3,7 @@
 // Every network call goes through this interface. Today it is backed by `mockClient`; when the generated
 // OpenAPI client lands, only `provideClient`/the default export changes — pages and hooks are untouched.
 
-import type { AtlasData } from './types'
+import type { AtlasData, AtlasEnvironment } from './types'
 
 import type {
   AnswerInput,
@@ -51,6 +51,12 @@ export interface ApiClient {
 
   /** Population life expectancy for every country the model carries a life table for. */
   getAtlas(): Promise<AtlasData>
+
+  /**
+   * Where the air has been measured, and where it has not. Separate from `getAtlas` and fetched only
+   * when a reader switches the layer on — it is several times the size of the country table.
+   */
+  getEnvironment(): Promise<AtlasEnvironment>
 }
 
 let active: ApiClient | null = null

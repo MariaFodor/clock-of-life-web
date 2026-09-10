@@ -264,6 +264,74 @@ export interface AtlasCountry {
   le60: Partial<Record<SexKey, number>>
   /** of 1,000 people alive at 15, how many die before 60 */
   am: Partial<Record<SexKey, number>>
+  /**
+   * The air and greenness SUMMARY for this country. Present from model v4.1.1.
+   *
+   * `settlements: 0` is the statement the map is built around, and it is deliberately not the same as
+   * a missing `env`: zero means nobody has published a PM2.5 measurement for any settlement here since
+   * 2020, which is a fact about the measurement rather than about the country. 152 of the 237 drawn
+   * countries are in that position, and most of them still have a national `pm25` — so no dot is not
+   * the same as no data, and the page has to be able to say which.
+   */
+  env?: AtlasCountryEnv
+}
+
+export interface AtlasCountryEnv {
+  /** measured settlements inside the 2020-2025 window; 0 means none, not unknown */
+  settlements: number
+  latest_year: number | null
+  /** national population-weighted PM2.5, µg/m³ — exists for 227 countries */
+  pm25: number | null
+  pm25_year: number | null
+  /** population-weighted annual mean NDVI, derived from this country's own measured cities */
+  ndvi: number | null
+  /**
+   * How many cities that greenness figure rests on. 22 of the 30 scoreable countries rest on ONE, so
+   * anything that shows `ndvi` has to be able to say how thin it is.
+   */
+  ndvi_cities: number | null
+}
+
+/** One settlement with a measured reading, as the map draws it. */
+export interface EnvPoint {
+  iso3: string
+  city: string
+  lat: number
+  lon: number
+  /** annual mean PM2.5, µg/m³ */
+  pm25: number
+  year: number
+}
+
+/**
+ * The air layer: where there is a measurement, and — the load-bearing half — where there is not.
+ *
+ * Loaded lazily, only when a reader switches the layer on: 3,521 coordinate pairs are several times
+ * the whole country table. `unmeasured_iso3` arrives computed by the service rather than derived here
+ * by subtracting one list from another, which is the arithmetic an off-by-one hides in.
+ */
+export interface AtlasEnvironment {
+  model_version: string
+  pollutant: string
+  /**
+   * The radius a single reading is being claimed to speak for, in km. Served rather than hardcoded:
+   * it is the same tolerance the greenness match used, and the two claims must not drift apart.
+   */
+  speaks_for_km: number
+  /** [first, last] year a reading may come from */
+  window: [number, number]
+  points: EnvPoint[]
+  /** Countries the atlas draws that nobody has measured since 2020. */
+  unmeasured_iso3: string[]
+  sources?: Record<string, unknown>
+  /** What the data obliges. WHO's air database is share-alike, and the page has to say so. */
+  licences?: Array<{
+    licence: string
+    url: string | null
+    applies_to: string[]
+    share_alike: boolean
+    non_commercial: boolean
+  }>
 }
 
 /** Where the life tables came from — printed on the page rather than hardcoded into it. */

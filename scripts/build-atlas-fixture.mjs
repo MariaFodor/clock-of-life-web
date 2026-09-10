@@ -52,4 +52,20 @@ const out = { _bundle: { version: manifest.version, checksums_sha256_16: stamp,
                          note: 'regenerate with scripts/build-atlas-fixture.mjs when this stops matching' },
               ...atlas }
 writeFileSync(join(here, '..', 'src', 'features', 'atlas', 'atlas.fixture.json'), JSON.stringify(out))
+
+// The air layer, from the same running service and for the same reason. Kept VERBATIM rather than
+// sampled down: a fixture that holds 200 of the 3,521 points would make every coverage number on the
+// page wrong in the mock, and "152 countries have no measurement" is one of the claims this surface
+// makes. It is loaded by a dynamic import in mockClient, so its weight stays in its own chunk and
+// never reaches the production bundle.
+const envRes = await fetch(`${base}/api/atlas/environment`, { signal: AbortSignal.timeout(30_000) })
+if (!envRes.ok) throw new Error(`${envRes.status} ${envRes.statusText} from ${base}/api/atlas/environment`)
+const env = await envRes.json()
+const envOut = {
+  ...env,
+  _bundle: { version: manifest.version, checksums_sha256_16: stamp,
+             note: 'regenerate with scripts/build-atlas-fixture.mjs when this stops matching' },
+}
+writeFileSync(join(here, '..', 'src', 'features', 'atlas', 'environment.fixture.json'), JSON.stringify(envOut))
+console.log(`environment: ${env.points.length} points, ${env.unmeasured_iso3.length} unmeasured countries`)
 console.log(`fixture: ${atlas.countries.length} countries, bundle ${manifest.version} (${stamp})`)

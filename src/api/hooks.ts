@@ -45,6 +45,20 @@ export function useAtlas() {
   return useQuery({ queryKey: ['atlas'], queryFn: () => getClient().getAtlas(), staleTime: Infinity })
 }
 
+/**
+ * Where the air has been measured. `enabled` is the whole point: this payload is several times the size
+ * of the country table, so it is not fetched until a reader asks for the layer, and it is never fetched
+ * twice because the result never goes stale — a bundle change means a new model version, not a refetch.
+ */
+export function useAtlasEnvironment(enabled: boolean) {
+  return useQuery({
+    queryKey: ['atlas', 'environment'],
+    queryFn: () => getClient().getEnvironment(),
+    staleTime: Infinity,
+    enabled,
+  })
+}
+
 export function useStats() {
   return useQuery({ queryKey: queryKeys.stats, queryFn: () => getClient().getStats() })
 }
