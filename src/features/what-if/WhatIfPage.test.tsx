@@ -118,6 +118,38 @@ describe('<WhatIfPage/>', () => {
     expect(screen.getByText(/13 \(assumed\)/)).toBeInTheDocument()
   })
 
+  // The fifth entry point for the same defect, and the one that showed the precondition was never
+  // "the dose is imputed" but "the integer seed is not the effective dose". A DECLARED 12.5 gets
+  // there too — the interview's number field takes decimals — and it has no "(assumed)" tag to warn
+  // anyone, so the row silently disagrees with the model before the user touches anything.
+  it('prices a round-trip on a fractional declared dose as no change either', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<WhatIfPage />, { profile: { ...SAMPLE_PROFILE, smoke: 2, cigs_day: 12.5 } })
+    const dose = screen.getByRole('slider', { name: /cigarettes per day/i })
+    expect(dose).toHaveValue('13')
+    // Not "(assumed)": they did tell us, we only rounded the control.
+    expect(screen.queryByText(/assumed/)).not.toBeInTheDocument()
+
+    fireEvent.change(dose, { target: { value: '20' } })
+    fireEvent.change(dose, { target: { value: '13' } })
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+    expect(await screen.findByText(/±0\.0 yr|\+0\.0 yr/)).toBeInTheDocument()
+
+    // And a real cut from that same profile is still priced.
+    fireEvent.change(dose, { target: { value: '5' } })
+    await user.click(screen.getByRole('button', { name: /see the effect/i }))
+    expect(await screen.findByText(/\+\d+\.\d+ yr/)).toBeInTheDocument()
+  })
+
+  it('scores someone taking up smoking at the dose the model will use', () => {
+    // A never-smoker clicking Current reaches the imputed seed by the same door as the former
+    // smoker, and had no test of its own.
+    renderWithProviders(<WhatIfPage />, { profile: { ...SAMPLE_PROFILE, smoke: 0, cigs_day: 0 } })
+    fireEvent.click(screen.getByRole('button', { name: 'Current' }))
+    expect(screen.getByRole('slider', { name: /cigarettes per day/i })).toHaveValue('13')
+    expect(screen.getByText(/13 \(assumed\)/)).toBeInTheDocument()
+  })
+
   it('never offers a zero dose, which the model reads as unanswered rather than as quitting', () => {
     renderWithProviders(<WhatIfPage />, { profile: SAMPLE_PROFILE })
     // min=1: the service refuses a zero dose from a smoker, because scoring it would impute the

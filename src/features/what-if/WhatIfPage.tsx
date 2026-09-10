@@ -46,38 +46,46 @@ export function WhatIfPage() {
     )
   }
 
+  // The SCENARIO's smoking status, not the profile's — one name for it, read by everything here.
+  // A former smoker who switches to Current is scored at the smokers' mean from that moment, so the
+  // row has to say so too; reading the profile's status showed them a dose of 0 while the model
+  // used 12.18. Two names for this one status is how that happened, so there is only one.
   const smoke = changes.smoke ?? profile.smoke
   const pa = changes.pa_min ?? profile.pa_min
   const waist = changes.waist ?? profile.waist
+
   // Seeded from the EFFECTIVE dose, not the raw field. A current smoker who never answered the dose
   // question stores 0, and the model scores them at the cohort's smoker mean — so seeding from the
   // field left the row reading "0" while the slider's floor pinned the thumb to 1, and then
   // congratulated them for "cutting down" when they dragged it up to 5. The service compares
   // effective doses for exactly this reason; the control has to start from the same number, or it
   // argues with the answer it produces.
-  // The SCENARIO's smoking status, not the profile's: a former smoker who switches to Current is
-  // scored at the smokers' mean from that moment, so the row has to say so too. Reading the
-  // profile's status left them looking at a dose of 0 while the model used 12.18.
-  const scenarioSmoke = changes.smoke ?? profile.smoke
-  const imputedDose = scenarioSmoke === 2 && !profile.cigs_day
+  //
   // ceil, not round: 12.18 rounds DOWN to 12, which sits below the effective dose, so the seed
   // itself read as a reduction. ceil is not free either — 13 sits above it, and submitting the seed
   // would charge 0.1 years for standing still. That is why `submitted()` below drops the field
   // instead; the rounding only decides which way the phantom would have pointed.
-  const seedDose = Math.ceil(effectiveCigsDay({ smoke: scenarioSmoke, cigs_day: profile.cigs_day }))
+  const seedDose = Math.ceil(effectiveCigsDay({ smoke, cigs_day: profile.cigs_day }))
   const cigs = changes.cigs_day ?? seedDose
+  /** The seed is a number we chose, not one they gave us — say so on the row. */
+  const imputedDose = smoke === 2 && !profile.cigs_day && cigs === seedDose
 
   // Dragging the dose away and back to where it started is not a change, and must not be priced as
-  // one. The slider is integer while the imputed dose is 12.18, so NO integer seed round-trips
-  // cleanly: 12 came in under it and got a "cutting down" note on a no-op, 13 sits above it and
-  // costs a phantom 0.1 years in red. Neither rounding fixes that — dropping the field does. What
-  // the user did was nothing, so nothing is what we send.
+  // one. The slider is integer while the effective dose need not be, so the seed does not
+  // round-trip: 12 came in under an imputed 12.18 and got a "cutting down" note on a no-op, 13 sits
+  // above it and costs a phantom 0.1 years in red. Neither rounding fixes that — dropping the field
+  // does. What the user did was nothing, so nothing is what we send.
   //
-  // Against `seedDose`, NOT against `cigs`: `cigs` IS `changes.cigs_day` the moment the slider is
-  // touched, so comparing to it is a tautology that dropped EVERY dose change and left the lever
-  // inert for exactly the smokers this page added it for.
+  // Not gated on the dose being imputed. The precondition is "the integer seed is not the effective
+  // dose", and an imputed 12.18 is only one way to get there — a DECLARED 12.5 is another, and it
+  // is reachable, because the interview's number field takes decimals. Gating on `imputedDose` left
+  // that door open, which is the fifth entry point this same defect has been found at.
+  //
+  // Compared against `seedDose`, NOT against `cigs`: `cigs` IS `changes.cigs_day` the moment the
+  // slider is touched, so comparing to it is a tautology that dropped EVERY dose change and left
+  // the lever inert for exactly the smokers this page added it for.
   const submitted = (): WhatIfChanges =>
-    imputedDose && changes.cigs_day === seedDose ? { ...changes, cigs_day: undefined } : changes
+    changes.cigs_day === seedDose ? { ...changes, cigs_day: undefined } : changes
 
   const run = () => whatif.mutate({ base: profile, changes: submitted() })
   const reset = () => {
@@ -145,9 +153,7 @@ export function WhatIfPage() {
               value={cigs}
               // Say so when the number is ours rather than theirs: this person never told us, and a
               // bare "12" would read back as something they had reported.
-              display={imputedDose && changes.cigs_day === undefined
-                ? `${cigs.toFixed(0)} (assumed)`
-                : `${cigs.toFixed(0)}`}
+              display={imputedDose ? `${cigs.toFixed(0)} (assumed)` : `${cigs.toFixed(0)}`}
               onChange={(v) => setChanges((c) => ({ ...c, cigs_day: v }))}
             />
           )}
