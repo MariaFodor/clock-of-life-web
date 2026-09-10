@@ -8,8 +8,10 @@ import { PageHeader, Card, ErrorState, Loading, NoticeState } from '../../compon
 import { MoodSupportNote, StatisticalEstimateNote } from '../../components/framing'
 import {
   SECTIONS,
+  CONFIDENCE_LABEL,
   COUNTRY_API_CODE,
   DEFAULT_ANSWERS,
+  answerProgress,
   buildProfile,
   answersForApi,
   answersFromApi,
@@ -188,9 +190,13 @@ function LocationField({
         }}
       >
         <option value="">Choose your city or town…</option>
+        {/* The place name and nothing else. The reading and the year it was taken are not dropped —
+            they move to the line below, which tells the same story in words and has room to say what
+            the numbers mean. In the option they were measurement jargon repeated 40 times over,
+            asking the reader to compare µg/m³ figures to find where they live. */}
         {places.map((p) => (
           <option key={p.city} value={p.city}>
-            {p.city} — {p.pm25.toFixed(1)} µg/m³ ({p.pm25_year})
+            {p.city}
           </option>
         ))}
       </select>
@@ -333,6 +339,7 @@ function InterviewForm({
   const lastEstimated = useRef<string | null>(null)
   const set = (code: string) => (v: Answers[string]) => setAnswers((prev) => ({ ...prev, [code]: v }))
   const { profile, errors } = useMemo(() => buildProfile(answers), [answers])
+  const { answered, total } = useMemo(() => answerProgress(answers), [answers])
 
   const onSubmit = async () => {
     setSubmitError(null)
@@ -400,8 +407,8 @@ function InterviewForm({
             <div className="mb-3 flex items-baseline justify-between gap-3">
               <h2 className="text-lg font-semibold text-clock-ink">{section.title}</h2>
               {section.confidence && (
-                <span className="text-[11px] uppercase tracking-wide text-clock-muted">
-                  confidence: {section.confidence}
+                <span className="text-[11px] tracking-wide text-clock-muted">
+                  {CONFIDENCE_LABEL[section.confidence]}
                 </span>
               )}
             </div>
@@ -415,12 +422,14 @@ function InterviewForm({
                     <div className="mb-2 flex items-center gap-2">
                       <span className="label">{q.prompt}</span>
                       {q.unit && <span className="text-xs text-clock-muted">({q.unit})</span>}
+                      {/* What the reader needs from this chip is whether the answer counts, not
+                          which release we are on: "v1" is our word for our schedule. */}
                       {!q.scored && (
                         <span
                           className="rounded bg-clock-canvas px-1.5 py-0.5 text-[10px] text-clock-muted"
-                          title="Recorded for your profile, but the v1 estimate does not use it yet."
+                          title="Saved to your profile — not used in your number yet."
                         >
-                          not in v1 estimate
+                          not used in your number yet
                         </span>
                       )}
                     </div>
@@ -451,22 +460,69 @@ function InterviewForm({
           ))}
         </ul>
       )}
-      {submitError && (
-        <div className="mt-5">
-          <ErrorState message={submitError} />
-        </div>
-      )}
 
-      <div className="mt-6 flex items-center gap-4">
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={onSubmit}
-          disabled={errors.length > 0 || estimate.isPending || saveAnswers.isPending}
-        >
-          {estimate.isPending ? 'Calculating…' : saveAnswers.isPending ? 'Saving…' : 'Calculate my Life Clock'}
-        </button>
-        <StatisticalEstimateNote />
+      {/*
+        The one Calculate control, pinned to the bottom of the reader's view for the whole scroll
+        (UX-6): on a single page of ten sections it used to exist only past the last question, so
+        there was no way to tell from anywhere else how much was left or that finishing was possible.
+        The single-page structure itself is unchanged and stays that way (decided).
+
+        `sticky`, not `fixed`, and last in the DOM: it keeps its own place in the flow, so at the end
+        of the page it lands under the final card instead of sitting over it — no page padding to
+        keep in step with the bar's height — it inherits the page's width, and it is reached by
+        Tab after the last question rather than being an overlay that has to hand focus back.
+      */}
+      <div
+        data-testid="interview-bar"
+        className="sticky bottom-0 z-10 mt-6 rounded-t-xl border border-clock-line bg-clock-surface px-4 py-3 shadow-[0_-2px_6px_rgba(16,24,40,0.06)]"
+      >
+        {/*
+          A failed press reports back where the press happened. This message used to render at the
+          end of the document — which is ABOVE the bar's own position in the flow, so while the bar
+          was pinned it was off-screen: a 500 from /api/estimate flickered "Calculating…" and handed
+          the reader back a page that said nothing had gone wrong.
+
+          Here rather than scrolled-to: the bar covers the bottom of the scrollport, so scrolling the
+          message into view is the very thing that can put it under the bar, and it would carry the
+          reader away from the button the message asks them to press again. `ErrorState` is the app's
+          one error idiom and already announces itself (role="alert"), so it is reused, not restyled.
+        */}
+        {submitError && (
+          <div className="mb-3">
+            <ErrorState message={submitError} />
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <p className="text-sm font-medium text-clock-ink">
+                {`${answered} of ${total} answered`}
+              </p>
+              {/* The button is disabled from here, but the reasons are listed with the questions
+                  they belong to, which can be a screen away while the bar is pinned.
+
+                  Both states in one line, because this list holds both: on a first visit the only
+                  entry is the country question nobody has scrolled to yet, and "needs fixing" tells
+                  that reader they got something wrong before they have answered anything at all. */}
+              {errors.length > 0 && (
+                <p className="text-xs text-clock-muted">some answers are still missing or need a fix</p>
+              )}
+            </div>
+            {/* Shortened, not dropped: the framing rule follows the button wherever it goes, and
+                there is no interval on this page for the standard sentence's second half to mean. */}
+            <StatisticalEstimateNote>
+              A statistical estimate, not a prediction or diagnosis.
+            </StatisticalEstimateNote>
+          </div>
+          <button
+            type="button"
+            className="btn-primary shrink-0"
+            onClick={onSubmit}
+            disabled={errors.length > 0 || estimate.isPending || saveAnswers.isPending}
+          >
+            {estimate.isPending ? 'Calculating…' : saveAnswers.isPending ? 'Saving…' : 'Calculate my Life Clock'}
+          </button>
+        </div>
       </div>
     </div>
   )

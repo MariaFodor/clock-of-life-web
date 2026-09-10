@@ -43,6 +43,26 @@ export interface Section {
   questions: Question[]
 }
 
+/**
+ * How a section's evidence strength is put to the reader (UX-6).
+ *
+ * The grades below are about the EVIDENCE behind the section's questions, never about the person
+ * answering them — which is how "CONFIDENCE: HIGH" in the margin read. Total by construction: adding
+ * a grade to the union above fails the typecheck here rather than rendering an empty chip.
+ *
+ * The words are the app's EXISTING evidence scale, not a second one: `GRADE_LABEL` in
+ * components/framing.tsx already grades every attributed factor strong / moderate / weak / ungraded,
+ * and a reader who meets "medium evidence" on this page and "moderate evidence" on the Why page is
+ * left working out whether those are the same rung. They are, so they are said the same way.
+ */
+export const CONFIDENCE_LABEL: Record<NonNullable<Section['confidence']>, string> = {
+  high: 'strong evidence',
+  medium: 'moderate evidence',
+  // No section carries `low` today; worded here so the union stays covered — and worded in the same
+  // scale, because a grade nothing renders is exactly where a second vocabulary creeps back in.
+  low: 'weak evidence',
+}
+
 /** A location answer carries the looked-up exposure values captured at selection time. */
 export interface LocationAnswer {
   name: string
@@ -463,6 +483,32 @@ function isAnswered(v: Answers[string]): boolean {
     return o.name !== undefined || o.iso2 !== undefined
   }
   return true
+}
+
+/**
+ * How far through the questions the reader is — the interview's "N of M answered" bar (UX-6).
+ *
+ * M is what is VISIBLE for these answers, so answering "I used to smoke" raises the total by the two
+ * questions it reveals rather than leaving a count that quietly stopped describing the page.
+ *
+ * Checkbox questions are in NEITHER count. They are optional multi-selects: "has a doctor ever told
+ * you that you have any of these?" is completely answered by a healthy person ticking nothing, and
+ * an empty set cannot be told apart from an untouched one. Counting them answered would claim an
+ * answer nobody gave; counting them unanswered would hold every healthy reader two short of the
+ * total forever. Rather than invent a rule for them, they are left out of the phrase.
+ *
+ * A battery (the stress and mood scales) counts once, and only when every sub-item has a value.
+ *
+ * The phrase reports progress; it is not a gate. What enables Calculate is `buildProfile`'s errors,
+ * and some visible questions are deliberately skippable — blood pressure says "leave blank if
+ * unsure" — so N === M is not a state every reader can or should reach.
+ */
+export function answerProgress(a: Answers): { answered: number; total: number } {
+  const counted = ALL_QUESTIONS.filter((q) => q.type !== 'checkboxes' && isVisible(q, a))
+  return {
+    answered: counted.filter((q) => isAnswered(a[q.code])).length,
+    total: counted.length,
+  }
 }
 
 /**

@@ -3,10 +3,11 @@ import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { InterviewPage } from './InterviewPage'
+import { AppLayout } from '../../app/AppLayout'
 import { renderWithProviders } from '../../test/harness'
 import { createMockClient } from '../../api/mockClient'
 import { queryKeys } from '../../api/hooks'
-import type { AnswerRow, Profile } from '../../api/types'
+import type { AnswerRow, Estimate, Profile } from '../../api/types'
 
 function InterviewUnderRouter() {
   return (
@@ -119,10 +120,25 @@ describe('LEV-04 additions', () => {
     await user.selectOptions(picker, 'RO')
     const cities = await screen.findByLabelText(/which city or town/i)
     const options = within(cities as HTMLSelectElement).getAllByRole('option')
-    // Every option is a real settlement with its reading and the year it was taken — never a bare
-    // name, because a value with no year is indistinguishable from an invented one.
+    // Every option is a real measured settlement, offered by name (UX-6): picking where you live is
+    // not a measurement comparison, and the reading is still on the page — see the test below.
     expect(options.length).toBeGreaterThan(10)
-    expect(options.slice(1).every((o) => /µg\/m³ \(20\d\d\)/.test(o.textContent ?? ''))).toBe(true)
+    expect(within(cities as HTMLSelectElement).getByRole('option', { name: 'Bucuresti' })).toBeInTheDocument()
+    expect(options.some((o) => /µg\/m³/.test(o.textContent ?? ''))).toBe(false)
+  })
+
+  // The provenance is not dropped, it is moved: a value with no year is indistinguishable from an
+  // invented one, so the line under the select still carries the reading, the year, and what the
+  // greenness figure actually refers to.
+  it('keeps the measurement story in words under the select', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    await user.selectOptions(await screen.findByLabelText(/which city or town/i), 'Bucuresti')
+
+    const story = await screen.findByText(/air measured in Bucuresti in 20\d\d/i)
+    expect(story).toHaveTextContent(/µg\/m³/)
+    expect(story).toHaveTextContent(/national average/i)
   })
 })
 
@@ -389,5 +405,196 @@ describe('starting from the answers already saved', () => {
     // country the reader is being shown as unchosen.
     expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeDisabled()
     expect(screen.getByText(/would be about somewhere else/i)).toBeInTheDocument()
+  })
+})
+
+// UX-6: ten sections on one page (the single-page structure is decided and unchanged), with the
+// Calculate button previously reachable only past the last question and no sense of what remained.
+describe('the bottom bar', () => {
+  /** The phrase as a reader sees it, read back as numbers so the tests can talk about movement. */
+  function progress() {
+    const [, answered, total] = screen
+      .getByText(/^\d+ of \d+ answered$/)
+      .textContent!.match(/^(\d+) of (\d+) answered$/)!
+    return { answered: Number(answered), total: Number(total) }
+  }
+
+  it('carries the progress, the framing note and the only Calculate button', async () => {
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+    const bar = screen.getByTestId('interview-bar')
+
+    expect(within(bar).getByText(/^\d+ of \d+ answered$/)).toBeInTheDocument()
+    // The framing rule follows the button wherever the button goes (ADR-001).
+    expect(within(bar).getByText(/statistical estimate, not a prediction or diagnosis/i)).toBeInTheDocument()
+    // One control, not two: a second Calculate at the foot of the page would leave the reader
+    // guessing whether the two do the same thing.
+    expect(screen.getAllByRole('button', { name: /calculate my life clock/i })).toHaveLength(1)
+    expect(within(bar).getByRole('button', { name: /calculate my life clock/i })).toBeInTheDocument()
+  })
+
+  it('counts the questions on screen, and recounts when an answer reveals more', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+
+    const start = progress()
+    expect(start.answered).toBeLessThan(start.total)
+
+    // The country is the one question with no default, and it is counted like any other.
+    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'DE')
+    expect(progress()).toEqual({ answered: start.answered + 1, total: start.total })
+
+    // "I used to smoke" puts two more questions on the page, so there is more left, not less.
+    await user.click(screen.getByRole('radio', { name: "I used to, but I've quit" }))
+    const revealed = progress()
+    expect(revealed).toEqual({ answered: start.answered + 1, total: start.total + 2 })
+
+    await user.type(await screen.findByLabelText(/in what year did you quit/i), '2015')
+    expect(progress()).toEqual({ answered: revealed.answered + 1, total: revealed.total })
+  })
+
+  it('counts a scale once it is fully answered, and never a tick-box question', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+    const start = progress()
+
+    // Half of the mood scale is not an answer to it. (Both items "Several days" = 2, which stays
+    // under the support note's threshold, so only the counting moves here.)
+    const first = screen.getByText(/little interest or pleasure/i).parentElement!
+    await user.click(within(first).getByRole('radio', { name: 'Several days' }))
+    expect(progress()).toEqual(start)
+
+    const second = screen.getByText(/down, depressed, or hopeless/i).parentElement!
+    await user.click(within(second).getByRole('radio', { name: 'Several days' }))
+    expect(progress()).toEqual({ answered: start.answered + 1, total: start.total })
+
+    // Ticking a condition moves neither count: an empty tick-box set is a complete answer for a
+    // healthy person and indistinguishable from an untouched one, so the phrase stays out of it.
+    await user.click(screen.getByRole('checkbox', { name: 'Diabetes' }))
+    expect(progress()).toEqual({ answered: start.answered + 1, total: start.total })
+  })
+
+  it('is blocked and says something is unfinished while an answer is wrong', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+    const bar = screen.getByTestId('interview-bar')
+    const button = within(bar).getByRole('button', { name: /calculate my life clock/i })
+
+    // No country yet: the same condition that disabled the button at the foot of the page. The
+    // reasons live with their questions, which can be a screen away while the bar is pinned.
+    //
+    // The line covers both of the states that block the button, and this is the one where the
+    // wording matters most: on a pristine first visit nothing is WRONG — the one entry is the
+    // country question the reader has not scrolled to yet.
+    expect(button).toBeDisabled()
+    expect(within(bar).getByText(/some answers are still missing or need a fix/i)).toBeInTheDocument()
+
+    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    expect(button).toBeEnabled()
+    expect(within(bar).queryByText(/still missing or need a fix/i)).not.toBeInTheDocument()
+
+    // The other state the same line has to cover: an answer that is present and wrong.
+    const age = screen.getByLabelText('What is your age?')
+    await user.clear(age)
+    await user.type(age, '5')
+    expect(button).toBeDisabled()
+    expect(within(bar).getByText(/some answers are still missing or need a fix/i)).toBeInTheDocument()
+  })
+
+  it('says which of the two things it is doing, and cannot be pressed again while it does it', async () => {
+    const user = userEvent.setup()
+    const client = createMockClient()
+    const scoring = client.estimate
+    let finishScoring: () => void = () => {}
+    client.estimate = (p) =>
+      new Promise<Estimate>((resolve) => {
+        finishScoring = () => resolve(scoring(p))
+      })
+    // The save is the second half of the same press, and it has its own label.
+    client.saveAnswers = () => new Promise(() => {})
+
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview', client })
+    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
+
+    const busy = screen.getByRole('button', { name: 'Calculating…' })
+    expect(busy).toBeDisabled()
+
+    await act(async () => {
+      finishScoring()
+    })
+    // Every /api/estimate call writes a history row, so a button that stayed pressable here would
+    // let a second press append one.
+    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled()
+  })
+
+  it('reports a failed calculation at the bar, where the press happened', async () => {
+    const user = userEvent.setup()
+    const client = createMockClient()
+    client.estimate = async () => {
+      throw new Error('estimate service unavailable')
+    }
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview', client })
+    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
+
+    // The message used to render at the end of the document, which is ABOVE the pinned bar's own
+    // place in the flow — so a 500 flickered "Calculating…" and returned the reader to a page that
+    // showed nothing at all. Inside the bar it is on screen wherever they have scrolled to, and
+    // role="alert" means it is announced rather than merely present in the DOM.
+    const bar = screen.getByTestId('interview-bar')
+    const alert = await within(bar).findByRole('alert')
+    expect(alert).toHaveTextContent(/estimate service unavailable/i)
+    // Once, at the bar — not also left behind off-screen at the foot of the page.
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+
+    // And the reader is still on the interview, with the button they can press again.
+    expect(screen.queryByText('LIFE CLOCK HOME')).not.toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: /calculate my life clock/i })).toBeEnabled()
+  })
+
+  // WCAG 2.4.11 (Focus Not Obscured). The bar is pinned over the bottom of the app's scrollport, so
+  // the browser scrolls a Tab-focused field to exactly where the bar covers it unless the scrollport
+  // carries bottom scroll padding. The utility therefore sits on the shared shell (app/AppLayout.tsx)
+  // while the reason for it is this bar — so the bar's own tests are what guard it. jsdom does no
+  // layout and no scrolling, so the class itself is the most that can be asserted here.
+  it('leaves room under the app scrollport for a field the browser scrolls to', () => {
+    renderWithProviders(<AppLayout>{null}</AppLayout>)
+    const main = document.querySelector('main')!
+    expect(main.className).toMatch(/\bscroll-pb-\d+\b/)
+  })
+})
+
+describe('the interview in plain words', () => {
+  it('grades the evidence, not the reader', () => {
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+
+    const smoking = screen.getByText('Smoking').closest('section')!
+    expect(within(smoking).getByText('strong evidence')).toBeInTheDocument()
+    // The app's one evidence scale — strong / moderate / weak, as components/framing.tsx already
+    // grades every attributed factor. "medium evidence" here would be a second set of words for the
+    // same rung, on the same reader's screen.
+    const sleep = screen.getByText('Sleep').closest('section')!
+    expect(within(sleep).getByText('moderate evidence')).toBeInTheDocument()
+
+    // "CONFIDENCE: HIGH" is about the evidence behind the section, but in the margin of a health
+    // questionnaire it reads as a verdict on the person answering it.
+    expect(screen.queryByText(/confidence/i)).not.toBeInTheDocument()
+  })
+
+  it('tells an unscored question what it is, without release numbers', () => {
+    renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
+
+    // The mood scale is deliberately outside the risk score (EXP-12), and the chip sits with it.
+    const mood = screen.getByText(/how often have you been bothered by/i).parentElement!
+    const chip = within(mood).getByText('not used in your number yet')
+    expect(chip).toHaveAttribute('title', 'Saved to your profile — not used in your number yet.')
+
+    // A scored question carries no chip at all.
+    const age = screen.getByText('What is your age?').parentElement!
+    expect(within(age).queryByText(/not used in your number yet/i)).not.toBeInTheDocument()
+
+    // "v1" is our word for our own release schedule; it told the reader nothing about their answer.
+    expect(screen.queryByText(/not in v1 estimate/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\bv1\b/i)).not.toBeInTheDocument()
   })
 })
