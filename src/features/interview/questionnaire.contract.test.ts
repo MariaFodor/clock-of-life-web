@@ -5,7 +5,18 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { ALL_QUESTIONS, DEFAULT_ANSWERS, answersForApi, buildProfile, dietScore, stressScore } from './questionnaire'
+import {
+  ALL_QUESTIONS,
+  CONFIDENCE_LABEL,
+  DEFAULT_ANSWERS,
+  SECTIONS,
+  answerProgress,
+  answersForApi,
+  buildProfile,
+  dietScore,
+  isVisible,
+  stressScore,
+} from './questionnaire'
 
 const SEED_PATH = resolve(process.cwd(), '../clock-of-life-service/seeds/questions.json')
 if (!existsSync(SEED_PATH)) {
@@ -135,5 +146,76 @@ describe('aggregation formulas (LEV-04)', () => {
     // An incomplete battery is not "answered".
     const partial = answersForApi({ ...DEFAULT_ANSWERS, STRESS: [1, undefined, 3, 4] as unknown as number[] })
     expect(partial.map((p) => p.question_code)).not.toContain('Q19_stress')
+  })
+})
+
+// UX-6: the interview's bottom bar says "N of M answered", so the two counts have to mean what a
+// reader would take them to mean — the questions on THIS page, and the ones they have filled in.
+describe('how much of the interview is answered (UX-6)', () => {
+  it('counts the questions on screen, and the standard answers among them', () => {
+    // The starting state of a first visit. Both numbers are pinned rather than derived here: a
+    // question added to the questionnaire should make somebody look at this line and agree with it.
+    expect(answerProgress(DEFAULT_ANSWERS)).toEqual({ answered: 12, total: 24 })
+  })
+
+  it('grows the total when an answer reveals more questions', () => {
+    const never = answerProgress({ ...DEFAULT_ANSWERS, SMK: 'never' })
+    const former = answerProgress({ ...DEFAULT_ANSWERS, SMK: 'former' })
+    // "I used to smoke" reveals the quit year and the dose: there is genuinely more to answer, and a
+    // total that ignored it would drift away from the page it describes.
+    expect(former.total).toBe(never.total + 2)
+    expect(former.answered).toBe(never.answered)
+    expect(answerProgress({ ...DEFAULT_ANSWERS, SMK: 'former', YEARS_QUIT: 2015, CIGS: 10 }))
+      .toEqual({ answered: never.answered + 2, total: never.total + 2 })
+  })
+
+  it('leaves the tick-box questions out of both counts', () => {
+    // Ticking nothing under "has a doctor ever told you…" is a complete answer for a healthy person
+    // and indistinguishable from never having looked, so neither count claims to know.
+    const untouched = answerProgress(DEFAULT_ANSWERS)
+    const ticked = answerProgress({ ...DEFAULT_ANSWERS, COND: ['diabetes'], HIST: ['cvd'] })
+    expect(ticked).toEqual(untouched)
+    // The two of them (conditions, history) are absent from the total, not merely never answered.
+    const onScreen = ALL_QUESTIONS.filter((q) => isVisible(q, DEFAULT_ANSWERS)).length
+    expect(untouched.total).toBe(onScreen - 2)
+  })
+
+  it('counts a scale once, and only when every line of it is answered', () => {
+    const base = answerProgress(DEFAULT_ANSWERS)
+    // The shape a half-filled battery really holds: the field seeds one slot per item.
+    const half = { ...DEFAULT_ANSWERS, STRESS: [1, 2, undefined, undefined] as unknown as number[] }
+    expect(answerProgress(half).answered).toBe(base.answered)
+    expect(answerProgress({ ...DEFAULT_ANSWERS, STRESS: [1, 2, 3, 0] }).answered).toBe(base.answered + 1)
+  })
+
+  it('counts the country, whose answer is an object rather than a value', () => {
+    const base = answerProgress(DEFAULT_ANSWERS)
+    const withCountry = { ...DEFAULT_ANSWERS, COUNTRY: { iso2: 'RO', iso3: 'ROU', name: 'Romania' } }
+    expect(answerProgress(withCountry)).toEqual({ answered: base.answered + 1, total: base.total })
+  })
+
+  it('words every evidence grade in the app’s one scale, in lower case and without "confidence"', () => {
+    // The WHOLE record, not only the grades some section happens to carry today: `low` reaches no
+    // screen yet, and a grade nothing renders is exactly where a second vocabulary creeps back in.
+    const graded = Object.entries(CONFIDENCE_LABEL)
+    expect(graded.map(([grade]) => grade).sort()).toEqual(['high', 'low', 'medium'])
+
+    // And the scale is the app's existing one, read from where it is already written down rather
+    // than restated here — the same reason this file reads the service's seed instead of copying it.
+    // The interview's section chips and the attributed factors on the Why page are seen by the same
+    // reader, so "medium/limited evidence" beside "moderate/weak evidence" is two scales for one idea.
+    const framing = readFileSync(resolve(process.cwd(), 'src/components/framing.tsx'), 'utf8')
+    for (const [, label] of graded) {
+      expect(label).toBeTruthy()
+      expect(label).toBe(label.toLowerCase())
+      // "CONFIDENCE: HIGH" in the margin of a health questionnaire reads as a verdict on the reader.
+      expect(label).not.toMatch(/confidence/i)
+      expect(framing).toContain(`'${label}'`)
+    }
+
+    // Every grade a section actually carries is one the record words.
+    for (const section of SECTIONS) {
+      if (section.confidence) expect(CONFIDENCE_LABEL[section.confidence]).toBeTruthy()
+    }
   })
 })
