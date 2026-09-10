@@ -9,17 +9,21 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { CausalGraph } from './CausalGraph'
 import type { Ontology } from '../api/types'
 
-/** A structurally faithful slice: two mediation chains, a shared mediator, and a pure marker. */
+/** A slice of the real ontology, edge for edge: two mediation chains, a shared mediator, an edge
+ *  between two of that mediator's neighbours, and a pure marker. Every edge here is one the shipped
+ *  model declares — a fixture for a graph of causal claims does not get to invent one. */
 const ONTOLOGY: Ontology = {
   diet: { role: 'lever', causes: ['waist'] },
-  activity: { role: 'lever', causes: ['waist'] },
+  // activity -> diabetes exists so that hovering `waist` has an edge between two of its OWN
+  // neighbours. Without one, "only edges touching the focus light up" and "every edge lights up"
+  // are the same assertion, and the real ontology has 32 such edges around waist alone. It is a
+  // REAL edge of that ontology — an invented one would make this fixture assert a causal claim the
+  // model does not make, which is the one thing a graph of causal claims must never do.
+  activity: { role: 'lever', causes: ['waist', 'diabetes'] },
   waist: { role: 'lever', causes: ['diabetes', 'high_bp'],
            prior: { doi: '10.1136/bmj.m3324', first_author: 'Jayedi', year: 2020,
                     title: 'Central fatness and risk of all cause mortality' } },
-  // diabetes -> high_bp exists so that hovering `waist` has an edge between two of its OWN
-  // neighbours. Without one, "only edges touching the focus light up" and "every edge lights up"
-  // are the same assertion, and the real ontology has 32 such edges around waist alone.
-  diabetes: { role: 'manage', causes: ['high_bp'] },
+  diabetes: { role: 'manage', causes: [] },
   high_bp: { role: 'manage', causes: [] },
   sleep_long: { role: 'marker', causes: [] },
 }
@@ -28,10 +32,10 @@ describe('<CausalGraph/>', () => {
   it('draws every declared edge, and every one of them points forward', () => {
     const { container } = render(<CausalGraph ontology={ONTOLOGY} />)
     const edges = [...container.querySelectorAll('path[marker-end]')]
-    expect(edges).toHaveLength(5) // diet/activity->waist, waist->diabetes/high_bp, diabetes->high_bp
+    expect(edges).toHaveLength(5) // diet/activity->waist, activity->diabetes, waist->diabetes/high_bp
 
     // The layout claims a node sits one column right of its furthest-upstream cause. Grouping by
-    // ROLE instead looked tidier and buried 14 edges inside a single column while sending 11
+    // ROLE instead looked tidier and buried 10 edges inside a single column while sending 11
     // backwards — including smoking to heart history, which are the exact mediation paths this
     // drawing exists to show. Assert the invariant, not the coordinates.
     const xOf = (key: string) => {
@@ -42,7 +46,7 @@ describe('<CausalGraph/>', () => {
     }
     for (const [from, to] of [['diet', 'waist'], ['activity', 'waist'],
                               ['waist', 'diabetes'], ['waist', 'high_bp'],
-                              ['diabetes', 'high_bp']]) {
+                              ['activity', 'diabetes']]) {
       expect(xOf(to)).toBeGreaterThan(xOf(from))
     }
   })
@@ -72,7 +76,7 @@ describe('<CausalGraph/>', () => {
     // focus drowns the one path being asked about, which is the whole reason for hovering.
     const lit = [...container.querySelectorAll('path[marker-end]')]
       .filter((p) => p.getAttribute('class')?.includes('stroke-clock-brand'))
-    // 4 of the 5: diabetes->high_bp runs between two of waist's neighbours and must stay dark.
+    // 4 of the 5: activity->diabetes runs between two of waist's neighbours and must stay dark.
     expect(lit).toHaveLength(4)
     const dark = [...container.querySelectorAll('path[marker-end]')]
       .filter((p) => p.getAttribute('class')?.includes('stroke-clock-line/20'))
