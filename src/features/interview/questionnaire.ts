@@ -6,7 +6,7 @@
 // stays deliberately OUT of the risk score (EXP-12 artifact) and drives the support note instead.
 // Only YEARS_QUIT (pending the cessation-decay research) and AREA remain unscored context.
 
-import type { Profile } from '../../api/types'
+import type { CountryOption, Profile } from '../../api/types'
 
 export type QuestionType = 'number' | 'radio' | 'checkboxes' | 'battery' | 'location' | 'country'
 
@@ -75,6 +75,13 @@ const FREQ: Option[] = [
   { value: 'daily', label: 'Daily or more' },
 ]
 
+/**
+ * The service's code for Q0, named because the interview has to know BEFORE it mounts the form
+ * whether a country was saved: that is the one answer it cannot restore without the served country
+ * list (see `answersFromApi`).
+ */
+export const COUNTRY_API_CODE = 'Q0_country'
+
 export const SECTIONS: Section[] = [
   {
     title: 'About you',
@@ -87,7 +94,7 @@ export const SECTIONS: Section[] = [
       // sensible default — which is exactly why the previous default was wrong: every profile was sent
       // as `country: 'RO'`, so a German reader was scored against Romanian death rates and centred on
       // Romanian smoking and weight rates, and then told Romania was the country on their profile.
-      { code: 'COUNTRY', apiCode: 'Q0_country', prompt: 'Which country do you live in?', type: 'country', scored: true },
+      { code: 'COUNTRY', apiCode: COUNTRY_API_CODE, prompt: 'Which country do you live in?', type: 'country', scored: true },
       { code: 'AGE', apiCode: 'Q1_age', prompt: 'What is your age?', type: 'number', unit: 'years', scored: true },
       { code: 'SEX', apiCode: 'Q2_sex', prompt: 'What is your sex?', type: 'radio', scored: true, options: [
         { value: 'F', label: 'Female' },
@@ -471,4 +478,99 @@ export function answersForApi(a: Answers): Array<{ question_code: string; value:
     question_code: q.apiCode!,
     value: a[q.code],
   }))
+}
+
+const BY_API_CODE = new Map(
+  ALL_QUESTIONS.filter((q) => q.apiCode !== undefined).map((q) => [q.apiCode!, q]),
+)
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/**
+ * Does a saved value still fit this question as the question stands NOW? A stored answer was written
+ * against whatever version of the questionnaire was live then, so an option can have been dropped or
+ * a battery grown an item since.
+ *
+ * Membership of `options` is checked, not just the type: a value the field cannot show as chosen
+ * would sit there invisible while `buildProfile` scored it — an answer the reader can neither see
+ * nor correct, which is the failure mode this whole change is about.
+ */
+function fitsQuestion(q: Question, v: unknown): boolean {
+  const isOption = (x: unknown) => (q.options ?? []).some((o) => o.value === String(x))
+  if (q.type === 'number') return typeof v === 'number' && Number.isFinite(v)
+  if (q.type === 'radio') return typeof v === 'string' && isOption(v)
+  if (q.type === 'battery') {
+    return (
+      Array.isArray(v) &&
+      v.length === (q.items?.length ?? 0) &&
+      v.every((x) => typeof x === 'number' && isOption(x))
+    )
+  }
+  // The two object answers keep the codes and the readings captured when they were chosen, so they
+  // are restored as they were saved.
+  if (q.type === 'country') return isRecord(v) && typeof v.iso2 === 'string' && v.iso2 !== ''
+  if (q.type === 'location') return isRecord(v) && typeof v.name === 'string' && v.name !== ''
+  // checkboxes
+  return Array.isArray(v) && v.every((x) => typeof x === 'string' && isOption(x))
+}
+
+/** What a saved country is restored against: the options the picker will show, and `/api/meta`'s
+ *  map of codes that used to be valid and now resolve to one of them. */
+export interface CountryList {
+  options: CountryOption[]
+  aliases?: Record<string, string>
+}
+
+/**
+ * A saved country as the picker can show it TODAY, or nothing at all.
+ *
+ * `fitsQuestion` only asks whether the stored value LOOKS like a country, and that is not enough for
+ * this one question: the options are served, not listed here, so a code can be well-formed and still
+ * have no option. The bundle's own `country_aliases` ships `{"EL": "GR"}` and `country_options` omits
+ * the alias keys, so a profile saved as "EL" left the select on "Choose your country…" while
+ * `buildProfile` read a country and enabled Calculate — the reader submitting a country the screen
+ * was showing as unchosen. A retired code is therefore restored as the country it resolves to, and a
+ * code that resolves to nothing is dropped, which puts the reader exactly where a first visit does:
+ * the required-country error, above a picker that can answer it.
+ *
+ * With no list to check against — an older service, or `/api/meta` down — nothing can be healed or
+ * refuted, so the saved answer stands. It is the country that was scored, and the field says for
+ * itself that it cannot be answered right now.
+ */
+function healCountry(saved: CountryAnswer, countries?: CountryList): CountryAnswer | undefined {
+  const options = countries?.options ?? []
+  if (options.length === 0) return saved
+  if (options.some((o) => o.iso2 === saved.iso2)) return saved
+  const resolved = countries?.aliases?.[saved.iso2]
+  const option = resolved === undefined ? undefined : options.find((o) => o.iso2 === resolved)
+  return option ? { iso2: option.iso2, iso3: option.iso3, name: option.name } : undefined
+}
+
+/**
+ * The inverse of `answersForApi`: the saved rows from GET /api/answers back into interview state.
+ *
+ * All-or-nothing per row — either the saved value still fits its question or that question falls
+ * back to its default. A questionnaire that has changed since the answer was written must degrade to
+ * defaults, never crash the interview, so a row whose code no current question claims is dropped too.
+ *
+ * `countries` is what the country question is restored against; see `healCountry` for why that one
+ * answer needs more than its own stored shape to be trusted.
+ */
+export function answersFromApi(
+  rows: Array<{ question_code: string; value: unknown }>,
+  countries?: CountryList,
+): Answers {
+  const restored: Answers = {}
+  for (const row of rows) {
+    const q = BY_API_CODE.get(row.question_code)
+    if (!q || !fitsQuestion(q, row.value)) continue
+    if (q.type === 'country') {
+      const healed = healCountry(row.value as CountryAnswer, countries)
+      if (healed) restored[q.code] = healed
+      continue
+    }
+    restored[q.code] = row.value as Answers[string]
+  }
+  return restored
 }

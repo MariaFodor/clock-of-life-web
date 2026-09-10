@@ -19,12 +19,18 @@ export function useMeta() {
   return useQuery({ queryKey: queryKeys.meta, queryFn: () => getClient().getMeta() })
 }
 
-export function useCalculations() {
-  return useQuery({ queryKey: queryKeys.calculations, queryFn: () => getClient().listCalculations() })
+/** `enabled` so the rehydration (app/restore.tsx) can hold it back until there is an account to ask about. */
+export function useCalculations(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.calculations,
+    queryFn: () => getClient().listCalculations(),
+    enabled,
+  })
 }
 
-export function useAnswers() {
-  return useQuery({ queryKey: queryKeys.answers, queryFn: () => getClient().getAnswers() })
+/** The saved interview answers. `enabled` for the same reason as `useCalculations`. */
+export function useAnswers(enabled = true) {
+  return useQuery({ queryKey: queryKeys.answers, queryFn: () => getClient().getAnswers(), enabled })
 }
 
 /** The model's ontology — roles, causal graph, and the article behind each factor. */

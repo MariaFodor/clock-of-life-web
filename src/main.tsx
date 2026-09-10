@@ -6,6 +6,7 @@ import { App } from './app/App'
 import { createQueryClient } from './app/queryClient'
 import { AuthProvider } from './app/auth'
 import { ProfileProvider } from './app/profile'
+import { ProfileRestore } from './app/restore'
 import { ThemeProvider } from './app/theme'
 import { provideClient } from './api/client'
 import { createHttpClient } from './api/httpClient'
@@ -26,7 +27,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           {/* ProfileProvider wraps AuthProvider so logout can reset the in-memory profile/estimate. */}
           <ProfileProvider>
             <AuthProvider>
-              <App />
+              {/* Inside both: it needs the session to know whose work to look for, and the profile
+                  context to put it back. */}
+              <ProfileRestore>
+                <App />
+              </ProfileRestore>
             </AuthProvider>
           </ProfileProvider>
         </ThemeProvider>
