@@ -10,6 +10,7 @@ import { WhatIfPage } from '../features/what-if/WhatIfPage'
 import { RelocatePage } from '../features/relocate/RelocatePage'
 import { ProgressPage } from '../features/progress/ProgressPage'
 import { StatsPage } from '../features/stats/StatsPage'
+import { AtlasPage } from '../features/atlas/AtlasPage'
 
 export function App() {
   const { session } = useAuth()
@@ -26,6 +27,7 @@ export function App() {
         <Route path="/what-if" element={<WhatIfPage />} />
         <Route path="/relocate" element={<RelocatePage />} />
         <Route path="/progress" element={<ProgressPage />} />
+        <Route path="/world" element={<AtlasPage />} />
         <Route path="/stats" element={<StatsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

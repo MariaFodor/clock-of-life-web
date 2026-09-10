@@ -15,5 +15,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/what-if', label: 'What If?', glyph: '⇄', description: 'Simulate a change' },
   { to: '/relocate', label: 'Where to Live', glyph: '⌖', description: 'Compare places' },
   { to: '/progress', label: 'My Progress', glyph: '∿', description: 'Your history' },
+  { to: '/world', label: 'The World', glyph: '◍', description: 'How long people live, everywhere' },
   { to: '/stats', label: 'Statistics', glyph: '▤', description: 'Cohort comparisons' },
 ]

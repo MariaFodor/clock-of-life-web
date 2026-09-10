@@ -40,6 +40,11 @@ export function useLocations() {
   return useQuery({ queryKey: queryKeys.locations, queryFn: () => getClient().listLocations() })
 }
 
+/** The world's life tables. Ships with the model version, so it cannot change under a session. */
+export function useAtlas() {
+  return useQuery({ queryKey: ['atlas'], queryFn: () => getClient().getAtlas(), staleTime: Infinity })
+}
+
 export function useStats() {
   return useQuery({ queryKey: queryKeys.stats, queryFn: () => getClient().getStats() })
 }

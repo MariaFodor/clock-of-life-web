@@ -4,6 +4,10 @@
 // tiny amount of session state (calculation history, saved answers) to make Progress and the interview
 // round-trip feel real. Scoring is delegated to mockScoring (the pure, tested core).
 
+import atlasFixture from '../features/atlas/atlas.fixture.json'
+
+import type { AtlasData } from './types'
+
 import type { ApiClient } from './client'
 import type {
   AnswerInput,
@@ -271,6 +275,13 @@ export function createMockClient(): ApiClient {
             ? `${candidate.name} has cleaner air (PM2.5 ${candidate.pm25} vs ${current.pm25} µg/m³) and more greenspace.`
             : `${candidate.name} has higher PM2.5 (${candidate.pm25} vs ${current.pm25} µg/m³) than your current area.`,
       }
+    },
+
+    async getAtlas(): Promise<AtlasData> {
+      // Generated from the service's OWN response (see atlas.parity.test.ts), not written by hand:
+      // a fixture invented in this repo is a second source of truth that drifts silently, which is
+      // the whole failure this surface was redesigned to avoid.
+      return atlasFixture as AtlasData
     },
 
     async getStats(): Promise<CohortStat[]> {
