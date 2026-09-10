@@ -260,9 +260,32 @@ export function createMockClient(): ApiClient {
     },
 
     async relocate(profile: Profile, candidateId: string): Promise<RelocateResult> {
-      // The user's current location is implied by their profile country; mock it as Bucharest.
-      const current = LOCATIONS[0]
-      const candidate = LOCATIONS.find((l) => l.id === candidateId) ?? LOCATIONS[0]
+      // The candidate is a place NAME resolved INSIDE the reader's own country, which is the rule the
+      // service applies: `location_by_name(name, country)` over rows seeded from the same places.json
+      // that `/places/{iso3}` serves, and a 404 "unknown location" for anything else. Matching against
+      // the four illustrative rows instead priced every settlement as Bucharest.
+      const atlas = await this.getAtlas()
+      const iso3 = atlas.countries.find((c) => c.iso2 === profile.country)?.iso3 ?? null
+      const places = iso3 ? (await this.getPlaces(iso3)).places : []
+      const match = places.find((p) => p.city === candidateId)
+      if (!match) throw new Error(`unknown location: ${candidateId} (${profile.country})`)
+
+      const candidate: Location = {
+        id: match.city,
+        name: match.city,
+        pm25: match.pm25,
+        ndvi: match.ndvi ?? undefined,
+        kind: 'city',
+      }
+      // The baseline is the reader's OWN recorded exposure, as `from` is on the wire. Unknown stays
+      // unknown — 0 µg/m³ would read as pristine air (PR#1 N1).
+      const current: Location = {
+        id: 'current',
+        name: 'your current area',
+        pm25: profile.pm25,
+        ndvi: profile.ndvi,
+        kind: 'city',
+      }
       // Only the ENV term changes when relocating, so the person's other risk cancels: the year effect
       // depends solely on the change in environmental log-hazard.
       const dLogHazard = envLogHazard(candidate, current)
@@ -276,12 +299,14 @@ export function createMockClient(): ApiClient {
         candidate,
         delta_years: delta,
         // Never state a comparison we cannot make: an unknown exposure on either side gets its
-        // own branch instead of an "undefined vs undefined" claim (PR#1 round-2 note).
+        // own branch instead of an "undefined vs undefined" claim (PR#1 round-2 note). The claim is
+        // also held to what was actually tested — this used to add "and more greenspace" to the
+        // cleaner-air branch, which compared nothing but air.
         explanation: !comparable
-          ? `We don't have air-quality data for one of these areas, so this comparison covers only what we could measure.`
+          ? `No air measurement is recorded for your home, so this comparison covers only what we could measure.`
           : cleaner
-            ? `${candidate.name} has cleaner air (PM2.5 ${candidate.pm25} vs ${current.pm25} µg/m³) and more greenspace.`
-            : `${candidate.name} has higher PM2.5 (${candidate.pm25} vs ${current.pm25} µg/m³) than your current area.`,
+            ? `${candidate.name} has cleaner air than your home — ${candidate.pm25} against ${current.pm25} µg/m³.`
+            : `${candidate.name} has more fine-particle pollution than your home — ${candidate.pm25} against ${current.pm25} µg/m³.`,
       }
     },
 

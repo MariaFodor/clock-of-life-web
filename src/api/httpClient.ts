@@ -33,6 +33,18 @@ import { getToken } from './token'
 
 const BASE = '/api'
 
+/**
+ * A failed request, with the HTTP status alongside the service's own words.
+ *
+ * The status cannot be recovered from the message: when the service sends `{ error: "..." }` the
+ * message IS that sentence, and it carries no code — `/api/places/{iso3}` answers 404 with "no measured
+ * settlements for ROU", which reads no differently from a fault. Callers that must tell a refusal apart
+ * from a failure read `status`; the message text is unchanged, because other surfaces assert on it.
+ */
+export interface HttpError extends Error {
+  status: number
+}
+
 async function request<T>(path: string, init: RequestInit = {}, skipAuth = false): Promise<T> {
   const headers = new Headers(init.headers)
   if (init.body) headers.set('Content-Type', 'application/json')
@@ -49,7 +61,9 @@ async function request<T>(path: string, init: RequestInit = {}, skipAuth = false
     } catch {
       /* non-JSON error body */
     }
-    throw new Error(message)
+    const error = new Error(message) as HttpError
+    error.status = res.status
+    throw error
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
