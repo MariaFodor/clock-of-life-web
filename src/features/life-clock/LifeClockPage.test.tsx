@@ -195,3 +195,30 @@ describe('carried notices', () => {
     expect(screen.queryByText(/could not record Cluj-Napoca/i)).not.toBeInTheDocument()
   })
 })
+
+describe('the open interval at the top of the life table', () => {
+  // UN WPP closes every table with ONE interval covering everyone 100 and over, so the estimate is
+  // flat across it by construction. A reader of 104 and a reader of 110 get the same figure — not
+  // because the model thinks they are alike, but because the source cannot tell them apart. Without
+  // saying so, a centenarian watching the number not move would reasonably conclude their age made no
+  // difference. (Until bundle v4.2.0 this was worse and silent: every age from 100 to 110 was priced
+  // at exactly half a year.)
+  it('says why the number stops moving, for a reader at or above 100', async () => {
+    renderWithProviders(<LifeClockPage />, {
+      profile: { ...SAMPLE_PROFILE, age: 104 },
+      estimate: SAMPLE_ESTIMATE,
+    })
+    expect(await screen.findByText(/publishes one figure for everyone aged 100 and over/i))
+      .toBeInTheDocument()
+  })
+
+  it('does not say it to anyone below 100, where the table does resolve year by year', async () => {
+    renderWithProviders(<LifeClockPage />, {
+      profile: { ...SAMPLE_PROFILE, age: 99 },
+      estimate: SAMPLE_ESTIMATE,
+    })
+    // Wait for the card itself rather than a phrase that appears more than once on the page.
+    await screen.findByText(/Yearly risk vs the average/i)
+    expect(screen.queryByText(/publishes one figure for everyone/i)).toBeNull()
+  })
+})
