@@ -14,6 +14,7 @@
 // hatch: an absence drawn as an absence rather than left as empty space.
 
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { Card } from '../../components/ui'
 import { fillOfPm25 } from './AirLayer'
 import type { CountryOutline } from './types'
@@ -195,7 +196,15 @@ export function CountryPanel({
             {nationalNdvi !== null ? <> of {nationalNdvi.toFixed(2)}</> : null} — what every other
             settlement here is scored against, because nobody has measured them.
           </>
-        )}
+        )}{' '}
+        {/* The division of labour, said once and in the place a reader would otherwise wonder about
+            it. This panel and Where Should I Live draw the same settlements, and that is not a
+            duplication: one shows what was MEASURED there, the other what those measurements would do
+            to this reader's own estimate. Without the sentence the two look like the same page twice. */}
+        <Link to="/relocate" className="text-clock-brand underline">
+          What these places would do to your own estimate
+        </Link>{' '}
+        is a different question, and it has its own page.
       </p>
       </div>
     </Card>

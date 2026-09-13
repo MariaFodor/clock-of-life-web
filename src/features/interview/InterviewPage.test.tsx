@@ -31,7 +31,20 @@ async function answerIdentity(user: ReturnType<typeof userEvent.setup>, iso2 = '
   await user.click(screen.getByRole('radio', { name: 'Female' }))
 }
 
-describe('<InterviewPage/>', () => {
+/**
+ * A longer per-test timeout for this file.
+ *
+ * The interview renders 25 questions and these tests drive it with `userEvent`, which types a character
+ * at a time through the real event pipeline — answering country, age and sex is dozens of round trips
+ * through React before a single assertion runs. Under CPU contention that overruns the default 5s and
+ * the file reports failures it passes on its own, twice in a row, every time.
+ *
+ * The same reasoning as the World page's: a gate that flakes under load is not a gate, and the fix is
+ * to give the slowest surfaces the time they genuinely need rather than to learn to ignore red.
+ */
+const SLOW_FORM_MS = 20_000
+
+describe('<InterviewPage/>', { timeout: SLOW_FORM_MS }, () => {
   it('renders the sectioned questionnaire with "why we ask"', () => {
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
     expect(screen.getByText('About you')).toBeInTheDocument()
@@ -51,7 +64,7 @@ describe('<InterviewPage/>', () => {
     expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeDisabled()
   })
 
-  it('will not calculate until it knows which country, and says why', { timeout: 20_000 }, async () => {
+  it('will not calculate until it knows which country, and says why', async () => {
     const user = userEvent.setup()
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
 

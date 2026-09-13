@@ -46,7 +46,14 @@ export interface ApiClient {
   /** The model's ontology: roles, causal graph and the verified article behind each factor. */
   getOntology(): Promise<Ontology>
   listLocations(): Promise<Location[]>
-  relocate(profile: Profile, candidateId: string): Promise<RelocateResult>
+  /**
+   * What the reader's own estimate would be at another address — in their own country, or abroad.
+   *
+   * `toCountry` defaults to the profile's own. When it differs, the service re-bases the whole estimate
+   * on the destination: its life table, its reference population and its exposure reference. It used to
+   * refuse that outright, and before that answer it wrongly.
+   */
+  relocate(profile: Profile, candidateId: string, toCountry?: string): Promise<RelocateResult>
   getStats(): Promise<CohortStat[]>
 
   /** Population life expectancy for every country the model carries a life table for. */
