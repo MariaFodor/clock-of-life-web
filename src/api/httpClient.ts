@@ -259,14 +259,23 @@ export function createHttpClient(): ApiClient {
       }))
     },
 
-    async relocate(profile: Profile, candidateId: string): Promise<RelocateResult> {
+    async relocate(profile: Profile, candidateId: string, toCountry?: string): Promise<RelocateResult> {
+      const destination = toCountry ?? profile.country
       const res = await post<{
         from: { name: string; pm25: number; ndvi: number } | null
         to: { name: string; pm25: number; ndvi: number }
         delta_years: number
-        breakdown: { air_delta_years: number; greenspace_delta_years: number }
+        moving_country: boolean
+        from_country: string
+        to_country: string
+        breakdown: {
+          air_delta_years: number | null
+          greenspace_delta_years: number | null
+          national_delta_years: number | null
+          address_delta_years: number | null
+        }
         note: string
-      }>('/relocate', { base: profile, to: candidateId, country: profile.country })
+      }>('/relocate', { base: profile, to: candidateId, country: destination })
 
       const current: Location = res.from
         ? { id: res.from.name, name: res.from.name, pm25: res.from.pm25, ndvi: res.from.ndvi, kind: 'city' }
@@ -279,10 +288,29 @@ export function createHttpClient(): ApiClient {
             kind: 'city',
           }
       const candidate: Location = { id: res.to.name, name: res.to.name, pm25: res.to.pm25, ndvi: res.to.ndvi, kind: 'city' }
-      const air = res.breakdown.air_delta_years
-      const green = res.breakdown.greenspace_delta_years
-      const explanation = `Air quality accounts for ${air >= 0 ? '+' : ''}${air.toFixed(1)} yr and greenspace ${green >= 0 ? '+' : ''}${green.toFixed(1)} yr of the difference. ${res.note}`
-      return { current, candidate, delta_years: res.delta_years, explanation }
+      const { air_delta_years: air, greenspace_delta_years: green } = res.breakdown
+      const signed = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)} yr`
+      // Across a border the sentence is about the two halves that exist there; within one country it is
+      // about air and greenness. Saying "air accounts for +0.0" after a move abroad would be reporting
+      // a split the service deliberately did not make, because it is not separable across a border.
+      const explanation = res.moving_country
+        ? `Almost all of this is the country itself — its death rates account for ` +
+          `${signed(res.breakdown.national_delta_years ?? 0)} and the address for ` +
+          `${signed(res.breakdown.address_delta_years ?? 0)}. ${res.note}`
+        : air === null || green === null
+          ? res.note
+          : `Air quality accounts for ${signed(air)} and greenspace ${signed(green)} of the difference. ${res.note}`
+      return {
+        current,
+        candidate,
+        delta_years: res.delta_years,
+        explanation,
+        moving_country: res.moving_country,
+        from_country: res.from_country,
+        to_country: res.to_country,
+        national_delta_years: res.breakdown.national_delta_years,
+        address_delta_years: res.breakdown.address_delta_years,
+      }
     },
 
     async getAtlas(): Promise<AtlasData> {

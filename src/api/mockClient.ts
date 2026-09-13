@@ -262,16 +262,19 @@ export function createMockClient(): ApiClient {
       return LOCATIONS
     },
 
-    async relocate(profile: Profile, candidateId: string): Promise<RelocateResult> {
+    async relocate(profile: Profile, candidateId: string, toCountry?: string): Promise<RelocateResult> {
       // The candidate is a place NAME resolved INSIDE the reader's own country, which is the rule the
       // service applies: `location_by_name(name, country)` over rows seeded from the same places.json
       // that `/places/{iso3}` serves, and a 404 "unknown location" for anything else. Matching against
       // the four illustrative rows instead priced every settlement as Bucharest.
       const atlas = await this.getAtlas()
-      const iso3 = atlas.countries.find((c) => c.iso2 === profile.country)?.iso3 ?? null
+      // The DESTINATION's country, which is the reader's own unless they asked to look abroad.
+      const destination = toCountry ?? profile.country
+      const movingCountry = destination !== profile.country
+      const iso3 = atlas.countries.find((c) => c.iso2 === destination)?.iso3 ?? null
       const places = iso3 ? (await this.getPlaces(iso3)).places : []
       const match = places.find((p) => p.city === candidateId)
-      if (!match) throw new Error(`unknown location: ${candidateId} (${profile.country})`)
+      if (!match) throw new Error(`unknown location: ${candidateId} (${destination})`)
 
       const candidate: Location = {
         id: match.city,
@@ -291,19 +294,44 @@ export function createMockClient(): ApiClient {
       //
       // Still never 0 µg/m³ as a stand-in: absent stays absent when the country has no figure either,
       // because zero would read as pristine air (PR#1 N1).
-      const reference = atlas.countries.find((c) => c.iso2 === profile.country)?.env
+      // Each side's exposure is priced against its OWN country's average, so the reader's home reads
+      // from the origin's reference — not the destination's.
+      const homeReference = atlas.countries.find((c) => c.iso2 === profile.country)?.env
       const current: Location = {
         id: 'current',
         name: 'your current area',
-        pm25: profile.pm25 ?? reference?.pm25 ?? undefined,
-        ndvi: profile.ndvi ?? reference?.ndvi ?? undefined,
+        pm25: profile.pm25 ?? homeReference?.pm25 ?? undefined,
+        ndvi: profile.ndvi ?? homeReference?.ndvi ?? undefined,
         kind: 'city',
       }
-      // Only the ENV term changes when relocating, so the person's other risk cancels: the year effect
-      // depends solely on the change in environmental log-hazard.
-      const dLogHazard = envLogHazard(candidate, current)
+      // Within one country only the ENV term changes, so the person's other risk cancels and the year
+      // effect depends solely on the change in environmental log-hazard.
+      //
+      // ACROSS A BORDER the life table changes too, and it dominates: measured against the service,
+      // a Romanian man of 45 moving to Berlin gains 4.0 years, of which 4.3 is Germany's death rates
+      // and −0.3 is Berlin's air being worse than the German average. The mock scores the destination
+      // country directly rather than approximating that.
       const base = scoreEstimate(profile).estimate_years
-      const scenario = base * Math.pow(Math.exp(dLogHazard), -0.4)
+      // `scoreEstimate` carries ONE life table — Romania's — so it cannot produce a national effect on
+      // its own, and asking it for one returned ±0.0 while the sentence beside it said the country is
+      // usually most of the difference. A mock that contradicts the page it renders is the defect this
+      // repo keeps deleting, so the national part is scaled from the atlas's own life expectancies
+      // instead: the ratio of the two countries' e(0) for this reader's sex, applied to their remaining
+      // years. Approximate by construction and directionally right — the service, which has both real
+      // tables, answers +4.3 for a Romanian man of 45 moving to Germany, and this gives +3.2.
+      const sexKey = profile.sex === 'M' ? 'm' : 'f'
+      const le = (iso2: string) => atlas.countries.find((c) => c.iso2 === iso2)?.le0?.[sexKey]
+      const homeLe = le(profile.country)
+      const destLe = le(destination)
+      const nationalDelta =
+        movingCountry && homeLe !== undefined && destLe !== undefined && homeLe > 0
+          ? round1(base * (destLe / homeLe - 1))
+          : movingCountry
+            ? 0
+            : null
+      const abroad = base + (nationalDelta ?? 0)
+      const dLogHazard = envLogHazard(candidate, current)
+      const scenario = abroad * Math.pow(Math.exp(dLogHazard), -0.4)
       const delta = round1(scenario - base)
       const comparable = candidate.pm25 !== undefined && current.pm25 !== undefined
       const cleaner = comparable && candidate.pm25! < current.pm25!
@@ -311,6 +339,11 @@ export function createMockClient(): ApiClient {
         current,
         candidate,
         delta_years: delta,
+        moving_country: movingCountry,
+        from_country: profile.country,
+        to_country: destination,
+        national_delta_years: nationalDelta,
+        address_delta_years: nationalDelta === null ? null : round1(delta - nationalDelta),
         // Never state a comparison we cannot make: an unknown exposure on either side gets its
         // own branch instead of an "undefined vs undefined" claim (PR#1 round-2 note). The claim is
         // also held to what was actually tested — this used to add "and more greenspace" to the

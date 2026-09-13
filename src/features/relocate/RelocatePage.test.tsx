@@ -45,7 +45,7 @@ const ROMANIA: CountryPlaces = {
  */
 function pendingCompares() {
   const waiting = new Map<string, { answer: (r: RelocateResult) => void; fail: (e: Error) => void }>()
-  const relocate = (_profile: Profile, city: string): Promise<RelocateResult> =>
+  const relocate = (_profile: Profile, city: string, _toCountry?: string): Promise<RelocateResult> =>
     new Promise((resolve, reject) => {
       waiting.set(city, { answer: resolve, fail: reject })
     })
@@ -57,6 +57,11 @@ const answerFor = (city: string, delta: number): RelocateResult => ({
   current: { id: 'current', name: 'your current area', pm25: 16.27, ndvi: 0.2539, kind: 'city' },
   candidate: { id: city, name: city, pm25: 13.99, ndvi: 0.41, kind: 'city' },
   delta_years: delta,
+  moving_country: false,
+  from_country: 'RO',
+  to_country: 'RO',
+  national_delta_years: null,
+  address_delta_years: null,
   explanation: `${city} has cleaner air than your home.`,
 })
 
@@ -168,8 +173,12 @@ describe('<RelocatePage/>', () => {
     expect(explainer).toHaveTextContent(/soot and dust small enough to be breathed/i)
     expect(explainer).toHaveTextContent(/micrograms per cubic metre/i)
     expect(explainer).toHaveTextContent(/how much living plant cover a satellite sees/i)
-    // The honest scope, with somewhere to go for the question this page refuses to answer.
-    expect(explainer).toHaveTextContent(/compares places inside Romania only/i)
+    // The honest scope. This page used to say it compared places "inside Romania only" and a move
+    // abroad was refused; it now re-bases the whole estimate on the destination, so the sentence has to
+    // name what that actually costs — and that the country's own death rates are usually most of it.
+    expect(explainer).toHaveTextContent(/pick any country the model can score/i)
+    expect(explainer).toHaveTextContent(/death rates ARE, and they are usually most of the difference/i)
+    expect(explainer).toHaveTextContent(/health service, the income and the food move with you/i)
     expect(screen.getByRole('link', { name: /the world/i })).toHaveAttribute('href', '/world')
   })
 
@@ -179,9 +188,12 @@ describe('<RelocatePage/>', () => {
     client.getMeta = () => new Promise(() => {})
     renderWithProviders(<RelocatePage />, { profile: HOME_PROFILE, client })
 
-    const explainer = await screen.findByTestId('measure-explainer')
-    expect(explainer).toHaveTextContent(/compares places inside your country only/i)
-    expect(explainer).not.toHaveTextContent(/inside RO/)
+    // The rule that survives the rewrite: never a bare ISO code in a sentence a person reads. The
+    // explainer no longer names the country at all, so the place that would have leaked one is the
+    // home strip, which falls back to "your country" until the served list arrives.
+    await screen.findByTestId('measure-explainer')
+    expect(screen.getByTestId('home-exposure')).not.toHaveTextContent(/\bRO\b/)
+    expect(document.body.textContent ?? '').not.toMatch(/\bRO\b/)
   })
 
   it('filters the list by name, ignoring case and accents', async () => {
@@ -219,6 +231,11 @@ describe('<RelocatePage/>', () => {
       current: { id: 'current', name: 'your current area', kind: 'city' },
       candidate: { id: city, name: city, pm25: 13.99, ndvi: 0.41, kind: 'city' },
       delta_years: 0.3,
+      moving_country: false,
+      from_country: 'RO',
+      to_country: 'RO',
+      national_delta_years: null,
+      address_delta_years: null,
       explanation: 'Air quality accounts for +0.3 yr and greenspace +0.0 yr of the difference.',
     })
     // SAMPLE_PROFILE has no pm25/ndvi — the interview's city question was never answered.
@@ -380,5 +397,87 @@ describe('<RelocatePage/>', () => {
     expect(await screen.findByText(/Your profile records ZZ as your country/i)).toBeInTheDocument()
     // No country, no guessed ISO3, no request — rather than a list belonging to somebody else.
     expect(asked).toBe(0)
+  })
+})
+
+describe('moving country', () => {
+  // This used to be REFUSED. The service could only re-price the air, and a German city's air priced
+  // against Romania's average and applied to Romanian death rates is a number about nowhere. It now
+  // re-bases the whole estimate on the destination — its life table, its average person, its own
+  // exposure reference — and splits the answer, because the split IS the finding: measured against the
+  // service, a Romanian man of 45 moving to Berlin gains 4.0 years, of which 4.3 is Germany's death
+  // rates and −0.3 is Berlin's air being worse than the German average. A reader who read the 4.0 as
+  // something about Berlin would have it exactly backwards.
+  const GERMANY = {
+    iso3: 'DEU', iso2: 'DE', name: 'Germany', scoreable: true,
+    reference: { settlements: 249, latest_year: 2024, pm25: 8.692, pm25_year: 2023, ndvi: 0.3453, ndvi_cities: 12 },
+    places: [{
+      iso3: 'DEU', city: 'Berlin', lat: 52.52, lon: 13.4, population: null, pm25: 9.6, pm25_year: 2024,
+      pm25_stations: null, pm25_temporal_coverage: null, ndvi: 0.3453, ndvi_year: 2021,
+      ndvi_basis: 'city' as const, ndvi_matched_city: null, ndvi_distance_km: null,
+    }],
+    coverage: { settlements: 249, with_city_greenness: 12, with_country_greenness: 237, without_greenness: 0 },
+  }
+
+  it('offers other countries, and re-bases the whole estimate on the one picked', async () => {
+    const user = userEvent.setup()
+    const client = createMockClient()
+    client.getPlaces = async (iso3: string) => (iso3 === 'DEU' ? GERMANY : ROMANIA)
+    let asked: [string, string | undefined] | null = null
+    client.relocate = async (_p, city, toCountry) => {
+      asked = [city, toCountry]
+      return {
+        current: { id: 'current', name: 'your current area', pm25: 16.27, ndvi: 0.2539, kind: 'city' },
+        candidate: { id: city, name: city, pm25: 9.6, ndvi: 0.3453, kind: 'city' },
+        delta_years: 4.0,
+        moving_country: true,
+        from_country: 'RO',
+        to_country: 'DE',
+        national_delta_years: 4.3,
+        address_delta_years: -0.3,
+        explanation: 'Almost all of this is the country itself.',
+      }
+    }
+    renderWithProviders(<RelocatePage />, { profile: HOME_PROFILE, client })
+
+    // Wait for the served country list before touching the picker: it renders empty for the moment
+    // between first paint and /api/meta answering, and selecting from an empty list selects nothing.
+    await screen.findByText('Brasov')
+    await screen.findByRole('option', { name: /Germany/i })
+    await user.selectOptions(screen.getByLabelText(/country to look at/i), 'DE')
+    // The list follows the country: Berlin is offered, and no Romanian place is.
+    expect(await screen.findByText('Berlin')).toBeInTheDocument()
+    expect(screen.queryByText('Brasov')).toBeNull()
+    // And the page says what looking abroad actually means before the reader clicks anything.
+    expect(screen.getByTestId('destination-country'))
+      .toHaveTextContent(/re-based on it: its national death rates/i)
+
+    await user.click(screen.getAllByRole('button', { name: /^compare /i })[0])
+    expect(await screen.findByTestId('move-breakdown')).toBeInTheDocument()
+    // The destination travelled with the request rather than being assumed to be the profile's.
+    expect(asked).toEqual(['Berlin', 'DE'])
+
+    const split = screen.getByTestId('move-breakdown')
+    expect(split).toHaveTextContent(/the country itself/i)
+    expect(split).toHaveTextContent('+4.3')
+    expect(split).toHaveTextContent(/the address/i)
+    expect(split).toHaveTextContent('0.3')
+    // The headline is the whole move, and the card names where it ends up.
+    expect(screen.getByTestId('relocate-result')).toHaveTextContent('Berlin, Germany')
+  })
+
+  it('shows no country/address split for a move within one country', async () => {
+    // There the split that means something is air versus greenness, and the service does not make the
+    // other one — each side's exposure is priced against its own country's average, so "change only the
+    // air" across a border would hold a Romanian greenness figure against Germany's reference.
+    const user = userEvent.setup()
+    const client = createMockClient()
+    client.getPlaces = async () => ROMANIA
+    client.relocate = async (_p, city) => answerFor(city, 1.2)
+    renderWithProviders(<RelocatePage />, { profile: HOME_PROFILE, client })
+    await screen.findByText('Brasov')
+    await user.click(screen.getAllByRole('button', { name: /^compare /i })[0])
+    await screen.findByTestId('relocate-result')
+    expect(screen.queryByTestId('move-breakdown')).toBeNull()
   })
 })

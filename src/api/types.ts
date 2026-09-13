@@ -236,6 +236,20 @@ export interface RelocateResult {
   candidate: Location
   delta_years: number
   explanation: string
+  /** true when the destination is in a different country — the estimate was re-based on it. */
+  moving_country: boolean
+  from_country: string
+  to_country: string
+  /**
+   * The two halves of a move abroad, which sum to `delta_years` by construction.
+   *
+   * `national` is the same person with no address in either country: the life table and the reference
+   * population alone. `address` is everything else — the two places' air and greenness, each priced
+   * against its own country's average. Both `null` for a move within one country, where the split that
+   * means something is air versus greenness instead.
+   */
+  national_delta_years: number | null
+  address_delta_years: number | null
 }
 
 /** How the user's estimate compares to the average person of the same age & sex (Life Clock surface). */

@@ -66,8 +66,23 @@ export function RelocatePage() {
   // Never print a bare country code into a sentence: "places inside RO" is the jargon this page is
   // being cleaned of, and the name is unknown for the moment the country list takes to arrive. The
   // code does appear in the refusal below, where saying what the profile stores is the point.
-  const countryName = option?.name ?? 'your country'
-  const places = usePlaces(iso3)
+  const homeCountryName = option?.name ?? 'your country'
+
+  /**
+   * Where the reader is looking, which starts as where they live.
+   *
+   * A move abroad used to be REFUSED — the service could only price the air, and pricing a German
+   * city's air against Romania's average and applying it to Romanian death rates is a number about
+   * nowhere. It now re-bases the whole estimate on the destination, so the question can finally be
+   * asked. Only the countries the model can SCORE are offered: 207 of 237 have a life table and no
+   * reference population, and a personal number there would be centred on a US cohort mean.
+   */
+  const [toCountry, setToCountry] = useState<string | null>(null)
+  const destination = toCountry ?? profile?.country ?? null
+  const destOption = options?.find((c) => c.iso2 === destination)
+  const countryName = destOption?.name ?? homeCountryName
+  const movingCountry = Boolean(destination && profile && destination !== profile.country)
+  const places = usePlaces(destOption?.iso3 ?? iso3)
 
   const [query, setQuery] = useState('')
   const [result, setResult] = useState<RelocateResult | null>(null)
@@ -116,7 +131,7 @@ export function RelocatePage() {
       <div>
         <PageHeader
           title="Where Should I Live?"
-          subtitle="Compare the measured places in your own country on their air and how green they are."
+          subtitle="What your own estimate would be at another address — in your country, or in another one."
         />
         <NeedsProfile />
       </div>
@@ -138,7 +153,7 @@ export function RelocatePage() {
       // The candidate travels as the place NAME alongside the reader's own country, which is the only
       // pair the service can resolve: it looks the name up within that country and answers "unknown
       // location" for anything else. Scoping the list to one country is what makes that hold.
-      const answer = await getClient().relocate(profile, city)
+      const answer = await getClient().relocate(profile, city, destination ?? undefined)
       if (ticket !== latestCompare.current) return
       setResult(answer)
     } catch (e) {
@@ -160,7 +175,7 @@ export function RelocatePage() {
     <div>
       <PageHeader
         title="Where Should I Live?"
-        subtitle="Compare the measured places in your own country on their air and how green they are."
+        subtitle="What your own estimate would be at another address — in your country, or in another one."
       />
 
       <div
@@ -177,21 +192,59 @@ export function RelocatePage() {
           greener.
         </p>
         <p>
-          This page compares places inside {countryName} only. Moving to another country changes far
-          more than the air — the health service, the income, the food and the country’s own death
-          rates all move with you, and none of that is in this comparison. To see how whole countries
-          differ, open <Link to="/world" className="text-clock-brand underline">The World</Link>.
+          This page is about YOUR estimate. The World shows what was measured in each place; this shows
+          what those measurements would do to your own number. Pick any country the model can score and
+          any measured place in it. Moving abroad changes far
+          more than the air — the health service, the income and the food move with you too, and none of
+          that is in this number — but the country’s own death rates ARE, and they are usually most of
+          the difference. The answer separates the two so you can see which is which. For the shape of
+          those national differences across the whole world, open{' '}
+          <Link to="/world" className="text-clock-brand underline">The World</Link>.
         </p>
       </div>
+
+      <Card className="mb-4" testId="destination-country">
+        <label className="label mb-1 block" htmlFor="relocate-country">
+          Country to look at
+        </label>
+        <select
+          id="relocate-country"
+          className="field max-w-[18rem]"
+          value={destination ?? ''}
+          onChange={(e) => {
+            setToCountry(e.target.value || null)
+            // A result about the previous country must not sit under a list of a different one.
+            setResult(null)
+            setFailure(null)
+            setQuery('')
+          }}
+        >
+          {[...(options ?? [])]
+            .sort((a, b) => (a.name ?? a.iso2).localeCompare(b.name ?? b.iso2))
+            .map((c) => (
+              <option key={c.iso2} value={c.iso2}>
+                {c.name ?? c.iso2}
+                {c.iso2 === profile?.country ? ' — where you live' : ''}
+              </option>
+            ))}
+        </select>
+        {movingCountry && (
+          <p className="mt-2 text-xs leading-relaxed text-clock-muted">
+            You are looking at another country, so the whole estimate is re-based on it: its national
+            death rates, its average person, and its own air and greenness. Everything about you is
+            assumed to travel unchanged, which a real move never quite is.
+          </p>
+        )}
+      </Card>
 
       <Card className="mb-4" testId="home-exposure">
         <h2 className="text-sm font-semibold text-clock-ink">Your home</h2>
         {homeUnmeasured ? (
           <p className="mt-1 text-sm text-clock-muted">
             No air measurement is recorded for your home. You can still compare, and you will get a
-            number — but every comparison below starts from {countryName}’s average air and greenness
-            instead of a reading from where you actually live, so what it measures is the place you pick
-            against your country, not against your street.
+            number — but every comparison below starts from {homeCountryName}’s average air and
+            greenness instead of a reading from where you actually live, so what it measures is the
+            place you pick against your own country’s average, not against your street.
           </p>
         ) : (
           <p className="mt-1 text-sm text-clock-muted">
@@ -226,6 +279,7 @@ export function RelocatePage() {
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="font-semibold text-clock-ink">
                 {result.current.name} → {result.candidate.name}
+                {result.moving_country && destOption?.name ? `, ${destOption.name}` : ''}
               </h3>
               <span
                 className={`text-lg font-bold ${
@@ -239,6 +293,37 @@ export function RelocatePage() {
                 {fmtDelta(result.delta_years)}
               </span>
             </div>
+            {/* The two halves of a move abroad, shown as a split rather than buried in a sentence —
+                because the split IS the finding. Measured against the service: a Romanian man of 45
+                moving to Berlin gains 4.0 years, of which 4.3 is Germany's death rates and −0.3 is
+                Berlin's air being worse than the German average. A reader who took the 4.0 as
+                something about Berlin would have it exactly backwards. */}
+            {result.moving_country
+              && result.national_delta_years !== null
+              && result.address_delta_years !== null && (
+              <dl className="mt-3 grid grid-cols-2 gap-3 text-sm" data-testid="move-breakdown">
+                <div className="rounded-lg border border-clock-line bg-clock-canvas p-3">
+                  <dt className="text-clock-muted">The country itself</dt>
+                  <dd className="mt-0.5 font-semibold text-clock-ink">
+                    {fmtDelta(result.national_delta_years)}
+                  </dd>
+                  <p className="mt-1 text-xs leading-relaxed text-clock-muted">
+                    Its national death rates and who counts as an average person there — nothing about
+                    the address you picked.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-clock-line bg-clock-canvas p-3">
+                  <dt className="text-clock-muted">The address</dt>
+                  <dd className="mt-0.5 font-semibold text-clock-ink">
+                    {fmtDelta(result.address_delta_years)}
+                  </dd>
+                  <p className="mt-1 text-xs leading-relaxed text-clock-muted">
+                    {result.candidate.name}’s air and greenness against its own country’s average,
+                    less the same for where you live now.
+                  </p>
+                </div>
+              </dl>
+            )}
             <p className="mt-2 text-sm text-clock-muted">{result.explanation}</p>
             {/* The number above is real, and it is not the number the reader assumes: with nothing
                 recorded for their home, the comparison started from the country's average. Said on the
@@ -246,7 +331,7 @@ export function RelocatePage() {
             {homeUnmeasured && (
               <p data-testid="home-average-caveat" className="mt-2 text-sm text-clock-muted">
                 Read this against your country, not your home: no air measurement is recorded for where
-                you live, so the comparison starts from {countryName}’s average air and greenness.
+                you live, so the comparison starts from {homeCountryName}’s average air and greenness.
               </p>
             )}
             <div className="mt-3">

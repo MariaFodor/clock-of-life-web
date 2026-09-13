@@ -10,6 +10,7 @@
 // panel has to state its coverage rather than let an empty map imply one.
 
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { CountryPanel, greenFill } from './CountryPanel'
@@ -34,9 +35,13 @@ const data = (over: Partial<CountryPlaces> = {}): CountryPlaces => ({
   ...over,
 })
 
+// A router, because the note links to Where Should I Live — the two surfaces draw the same settlements
+// and the link is what says they are answering different questions rather than duplicating each other.
 const panel = (d: CountryPlaces, layer: 'air' | 'green' = 'air', outline?: CountryOutline) =>
   render(
-    <CountryPanel outline={outline ?? OUTLINES.ROU} data={d} layer={layer} onLayerChange={vi.fn()} />,
+    <MemoryRouter>
+      <CountryPanel outline={outline ?? OUTLINES.ROU} data={d} layer={layer} onLayerChange={vi.fn()} />
+    </MemoryRouter>,
   )
 
 describe('the per-country outlines', () => {
@@ -116,7 +121,11 @@ describe('the country panel', () => {
   it('switches between the two readings', async () => {
     const user = userEvent.setup()
     const onLayerChange = vi.fn()
-    render(<CountryPanel outline={OUTLINES.ROU} data={data()} layer="air" onLayerChange={onLayerChange} />)
+    render(
+      <MemoryRouter>
+        <CountryPanel outline={OUTLINES.ROU} data={data()} layer="air" onLayerChange={onLayerChange} />
+      </MemoryRouter>,
+    )
     await user.click(screen.getByTestId('panel-layer-green'))
     expect(onLayerChange).toHaveBeenCalledWith('green')
   })
