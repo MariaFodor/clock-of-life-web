@@ -284,7 +284,11 @@ describe('<AtlasPage/>', () => {
     fireEvent.mouseEnter(container.querySelector('[data-iso3="POL"]')!)
     expect(screen.queryByTestId('place-readout')).toBeNull()
     const mapReadout = screen.getByTestId('map-readout')
-    expect(mapReadout).toHaveTextContent('Poland · 82.3 years (women)')
+    // 82.4, not 82.3, from bundle v4.2.0. The integrator used to price every life table's open final
+    // interval at a flat half-year; it now uses the publisher's own figure for it, which moved e(0) by
+    // a few hundredths across the board and onto the right side of a rounding boundary here. WPP
+    // publishes 82.3538 for Polish women, so 82.4 is the correct number and 82.3 was the defect.
+    expect(mapReadout).toHaveTextContent('Poland · 82.4 years (women)')
     expect(screen.getByTestId('map-tooltip').textContent).toBe(mapReadout.textContent)
   })
 
