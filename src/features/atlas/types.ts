@@ -37,3 +37,21 @@ export interface AtlasGeometry {
  * triples Europe against Africa) draws a different claim than the data makes.
  */
 export type ViewKey = 'world' | 'europe'
+
+/**
+ * One country drawn on its own, in its own Lambert azimuthal equal-area projection centred on itself.
+ *
+ * `centre` and `fit` together are everything needed to put a settlement's latitude and longitude onto
+ * this outline — the generator's own arithmetic rather than a second derivation of it.
+ */
+export interface CountryOutline {
+  viewBox: string
+  /** [lon, lat] the projection is centred on — the middle of the country's largest landmass. */
+  centre: [number, number]
+  fit: { minX: number; maxY: number; scale: number; offX: number; offY: number; width: number; height: number }
+  /** The SVG path, already fitted to `viewBox`. */
+  d: string
+}
+
+/** ISO3 → outline, for the 85 countries that have measured settlements. */
+export type CountryOutlines = Record<string, CountryOutline>

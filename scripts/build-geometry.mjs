@@ -11,7 +11,7 @@
 // What projecting here buys: no map library ships to the client, and no third-party request is made
 // while someone is reading their own health estimate.
 
-import { writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -242,6 +242,127 @@ function isoOf(f) {
   return null
 }
 
+
+/**
+ * One country on its own, projected and framed for itself.
+ *
+ * The World tab's country panel magnifies a single country to roughly 380px. Cropping it out of the
+ * Europe view does not survive that: those outlines are simplified for a 1000px-wide CONTINENT, so
+ * Romania arrives as 94 points and Malta as SIX — a triangle. Measured before choosing to generate
+ * this: 27 of the 30 scoreable countries survive a crop and three do not, and a country drawn wrong
+ * undermines every dot placed on top of it.
+ *
+ * Each country therefore gets its own Lambert azimuthal equal-area projection CENTRED ON ITSELF, which
+ * is what an atlas does for a single-country plate: distortion is least at the centre of projection,
+ * and equal-area keeps the promise the rest of this surface makes. The centre travels with the path so
+ * the app can project a settlement's latitude and longitude into the same frame.
+ */
+function laeaAt(lon0, lat0) {
+  const p1 = rad(lat0), l0 = rad(lon0)
+  return ([lon, lat]) => {
+    const p = rad(lat), dl = rad(lon) - l0
+    const denom = 1 + Math.sin(p1) * Math.sin(p) + Math.cos(p1) * Math.cos(p) * Math.cos(dl)
+    const k = Math.sqrt(2 / Math.max(denom, 1e-9))
+    return [k * Math.cos(p) * Math.sin(dl), k * (Math.cos(p1) * Math.sin(p) - Math.sin(p1) * Math.cos(p) * Math.cos(dl))]
+  }
+}
+
+function buildCountries(features, wanted, { width, tolerance, minAreaFraction, pad }) {
+  const out = {}
+
+  // ONE FEATURE PER CODE, AND IT MUST BE THE BIGGEST ONE.
+  //
+  // Natural Earth files one ISO3 under several features, and keying an object by code means the LAST
+  // one wins. Measured: AUS is the only code affected in the 50m file, and it carries three — Australia
+  // (area 686.65), Indian Ocean Territories (0.01) and Ashmore and Cartier Islands (0.00). Australia's
+  // outline therefore came out as a four-point rectangle centred in the Timor Sea.
+  //
+  // The continent views escape this by accident rather than by design: their absolute `minArea` drops
+  // the tiny features before they can overwrite anything. This builder's area filter is RELATIVE to
+  // each feature's own largest ring, so a 0.00-area territory passes its own test and wins the key.
+  const best = new Map()
+  for (const f of features) {
+    const iso3 = isoOf(f)
+    if (!iso3 || !wanted.has(iso3)) continue
+    const area = Math.max(0, ...polygons(f.geometry).map((poly) => ringArea(poly[0])))
+    const held = best.get(iso3)
+    if (!held || area > held.area) best.set(iso3, { f, area })
+  }
+
+  for (const { f } of best.values()) {
+    const iso3 = isoOf(f)
+
+    // Centre on the middle of the country's own lon/lat extent. A centroid weighted by area would sit
+    // in the same place for every country here and costs a pass over every vertex.
+    let w = Infinity, e = -Infinity, s2 = Infinity, n = -Infinity
+    for (const poly of polygons(f.geometry)) {
+      for (const [lon, lat] of poly[0]) {
+        if (lon < w) w = lon
+        if (lon > e) e = lon
+        if (lat < s2) s2 = lat
+        if (lat > n) n = lat
+      }
+    }
+    // France, Spain, Portugal and the Netherlands carry overseas territory thousands of km away, which
+    // would frame the "country" as an ocean with a speck in it. The rings are kept or dropped by AREA
+    // below; the CENTRE is taken from the largest ring alone so the frame lands on the mainland.
+    const biggest = polygons(f.geometry).reduce((a, b) => (ringArea(a[0]) > ringArea(b[0]) ? a : b))
+    let bw = Infinity, be = -Infinity, bs = Infinity, bn = -Infinity
+    for (const [lon, lat] of biggest[0]) {
+      if (lon < bw) bw = lon
+      if (lon > be) be = lon
+      if (lat < bs) bs = lat
+      if (lat > bn) bn = lat
+    }
+    const centre = [(bw + be) / 2, (bs + bn) / 2]
+    const project = laeaAt(centre[0], centre[1])
+
+    const rings = []
+    let largest = 0
+    for (const poly of polygons(f.geometry)) {
+      const projected = poly[0].map(project)
+      largest = Math.max(largest, ringArea(projected))
+      rings.push(projected)
+    }
+    // Relative to the country's own largest ring, not an absolute figure: an island worth drawing
+    // beside Greece is far smaller than one worth drawing beside France.
+    const kept = rings.filter((r) => ringArea(r) >= largest * minAreaFraction)
+    if (!kept.length) continue
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const [x, y] of kept.flat()) {
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
+    }
+    const spanX = (maxX - minX) || 1e-6
+    const spanY = (maxY - minY) || 1e-6
+    // One scale for both axes, so the country keeps its shape; the frame is padded and then squared
+    // off around it, which lets every panel share a viewBox and a tall country sit centred in it.
+    const scale = (width - pad * 2) / Math.max(spanX, spanY)
+    const height = width
+    const offX = (width - spanX * scale) / 2
+    const offY = (height - spanY * scale) / 2
+    const toBox = ([x, y]) => [(x - minX) * scale + offX, (maxY - y) * scale + offY]
+
+    const d = kept
+      .map((r) => simplify(r.map(toBox), tolerance))
+      .filter((r) => r.length >= 3)
+      .map((r) => `M${r.map(([x, y]) => `${round(x)} ${round(y)}`).join('L')}Z`)
+      .join('')
+    if (!d) continue
+    out[iso3] = {
+      viewBox: `0 0 ${width} ${height}`,
+      centre,
+      // Everything the app needs to put a settlement on this outline, in the generator's own numbers.
+      fit: { minX, maxY, scale, offX, offY, width, height },
+      d,
+    }
+  }
+  return out
+}
+
 // ── Build ─────────────────────────────────────────────────────────────────────
 
 console.log('fetching Natural Earth…')
@@ -283,6 +404,31 @@ const write = (name, view, projection, res) =>
 
 write('world.geo.json', world, 'Equal Earth', '110m')
 write('europe.geo.json', europe, 'ETRS89-LAEA (52°N 10°E)', '50m')
+
+// The country panel's outlines. Built for every country that HAS measured settlements — the panel has
+// nothing to draw for the rest, and the big map already hatches them — read from the service's own
+// places artifact rather than a list kept here, so the two cannot disagree about which countries exist.
+const placesPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..',
+  'clock-of-life-service', 'bundle')
+const bundleDir = readdirSync(placesPath).filter((d) => d.startsWith('model-v')).sort().pop()
+const measured = new Set(
+  JSON.parse(readFileSync(join(placesPath, bundleDir, 'places.json'), 'utf8')).map((p) => p.iso3),
+)
+const countries = buildCountries(ne50.features, measured, {
+  width: 400,
+  // Finer than the continent views, because this is the one place a single country is magnified:
+  // 0.25px at 400px across is roughly eight times the detail Europe's 0.5px at 1000px gives a country
+  // occupying a tenth of the frame.
+  tolerance: 0.25,
+  minAreaFraction: 0.004,
+  pad: 10,
+})
+writeFileSync(
+  join(OUT, 'countries.geo.json'),
+  JSON.stringify({ ...meta('50m', 'Lambert azimuthal equal-area, centred per country'), countries }, null, 1),
+)
+console.log(`countries: ${Object.keys(countries).length} outlines, ` +
+  `${(JSON.stringify(countries).length / 1024) | 0} KB`)
 
 console.log(`world:  ${Object.keys(world.countries).length} shapes, ${(JSON.stringify(world).length / 1024) | 0} KB, ${world.viewBox}`)
 console.log(`europe: ${Object.keys(europe.countries).length} shapes, ${(JSON.stringify(europe).length / 1024) | 0} KB, ${europe.viewBox}`)
