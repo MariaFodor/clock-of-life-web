@@ -23,6 +23,8 @@ import {
   readoutLine,
 } from './MortalityMap'
 import { CountryCard } from './CountryCard'
+import { CountryPanel } from './CountryPanel'
+import type { PanelLayer } from './CountryPanel'
 import { CountryTable } from './CountryTable'
 import {
   MEASURES,
@@ -39,8 +41,8 @@ import {
 } from './measures'
 import type { MeasureId } from './measures'
 import { buildScale } from './scale'
-import { useAtlas, useAtlasEnvironment } from '../../api/hooks'
-import { useAtlasGeometry } from './atlasData'
+import { useAtlas, useAtlasEnvironment, usePlaces } from '../../api/hooks'
+import { useAtlasGeometry, useCountryOutlines } from './atlasData'
 import type { ViewKey } from './types'
 import type { AtlasCountry, EnvPoint, SexKey } from '../../api/types'
 
@@ -155,6 +157,10 @@ export function AtlasPage() {
   // life expectancy should not pay for it, and the query is not issued until this is true.
   const [air, setAir] = useState(false)
   const [hoveredPlace, setHoveredPlace] = useState<EnvPoint | null>(null)
+  // Which of the two readings the country panel shows. Not derived from the air toggle above: a reader
+  // can be looking at life expectancy on the big map and at their own country's air down here, and
+  // tying the two together would make the panel disappear whenever they turned the world layer off.
+  const [panelLayer, setPanelLayer] = useState<PanelLayer>('air')
 
   const atlas = useAtlas()
   const geo = useAtlasGeometry(view)
@@ -207,6 +213,14 @@ export function AtlasPage() {
     () => new Set(geo.data ? Object.keys(geo.data.countries) : []),
     [geo.data],
   )
+
+  // The panel follows whatever country is in focus — the reader's own to begin with, then whatever
+  // they pick. Both hooks stay disabled until there is an ISO3 to ask about, so a reader who never
+  // scrolls to the panel never pays for its 317 KB of outlines or its per-country request.
+  const panelIso3 = selected && countryByKey(countries, selected)?.iso3 ? selected : null
+  const outlines = useCountryOutlines()
+  const panelPlaces = usePlaces(panelIso3)
+  const panelOutline = panelIso3 ? outlines.data?.[panelIso3] : undefined
 
   const readoutIso = hovered ?? selected
   const readoutCountry = countryByKey(countries, readoutIso)
@@ -389,6 +403,32 @@ export function AtlasPage() {
               )}
             </div>
           </Card>
+
+          {/* The close-up sits directly under the world map and above the country's figures: the map
+              answers "how does my country compare", this answers "where in my country", and the card
+              below answers "by how much". Only rendered when there is something to draw — a country
+              with no measured settlement gets the sentence rather than an empty frame. */}
+          {panelIso3 && panelPlaces.data && panelOutline && (
+            <div className="mt-4">
+              <CountryPanel
+                outline={panelOutline}
+                data={panelPlaces.data}
+                layer={panelLayer}
+                onLayerChange={setPanelLayer}
+              />
+            </div>
+          )}
+          {panelIso3 && panelPlaces.isError && (
+            <Card className="mt-4">
+              <p className="text-sm text-clock-muted" data-testid="country-panel-empty">
+                No settlement in {countryByKey(countries, selected)?.name ?? 'this country'} has had
+                its air measured since 2020, so there is nothing to draw close up. That is a gap in
+                the monitoring, not a clean result — {countryByKey(countries, selected)?.env?.pm25
+                  ? `the national estimate is ${countryByKey(countries, selected)!.env!.pm25!.toFixed(1)} µg/m³.`
+                  : 'and no national estimate is published for it either.'}
+              </p>
+            </Card>
+          )}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {countryByKey(countries, selected) ? (
