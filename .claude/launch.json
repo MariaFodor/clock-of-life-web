@@ -9,6 +9,7 @@
         "dev"
       ],
       "port": 5181,
+      "autoPort": true,
       "env": {
         "VITE_API_TARGET": "http://127.0.0.1:8099"
       }
