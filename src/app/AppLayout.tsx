@@ -101,12 +101,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 */}
                 <span data-testid="footer-provenance" className="hidden md:inline">
                   {' '}
-                  · {meta.algorithm} · reference population {meta.countries.join(', ')}
+                  {/*
+                    "scored for", not "reference population". A reader's reference population is ONE
+                    country — the average person where THEY live, which is what the relative risk is
+                    centred on. This list is the countries the model can score at all, and labelling it
+                    as the reference population said something the model does not do.
+                  */}
+                  · {meta.algorithm} · scored for {meta.countries.join(', ')}
                 </span>{' '}
                 — a statistical estimate, not a prediction.
               </p>
               <details className="md:hidden">
-                <summary className="cursor-pointer">Reference population</summary>
+                <summary className="cursor-pointer">Countries scored</summary>
                 <p className="mt-1">{meta.countries.join(', ')}</p>
               </details>
             </>

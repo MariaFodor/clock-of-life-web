@@ -77,7 +77,10 @@ export function createMockClient(): ApiClient {
 
     async getMeta(): Promise<Meta> {
       return {
-        model_version: '2.0.0',
+        // Read from the fixture, which is generated from the service, rather than restated here: a
+        // hardcoded version meant the footer printed "Model 2.0.0" — a bundle that has not existed for
+        // four releases — on every screen of the mock build.
+        model_version: (atlasFixture as unknown as AtlasData).model_version,
         algorithm: 'cox_ph',
         countries: ['RO', 'DE', 'FR', 'IT', 'ES', 'PL'],
         country_options: [
@@ -277,13 +280,23 @@ export function createMockClient(): ApiClient {
         ndvi: match.ndvi ?? undefined,
         kind: 'city',
       }
-      // The baseline is the reader's OWN recorded exposure, as `from` is on the wire. Unknown stays
-      // unknown — 0 µg/m³ would read as pristine air (PR#1 N1).
+      // The baseline is the reader's OWN recorded exposure where they have one — and THEIR COUNTRY'S
+      // AVERAGE where they do not, which is what the service does and what the page above already
+      // promises in words ("every comparison below starts from Romania's average air and greenness").
+      //
+      // Leaving it undefined made `envLogHazard` return 0 for both terms, so every comparison came
+      // back as ±0.0 years for a reader with no home location — while the service answered −0.4 for
+      // the same move. A mock that disagrees with the service is the second source of truth this repo
+      // keeps having to delete; here it also contradicted the sentence printed directly above it.
+      //
+      // Still never 0 µg/m³ as a stand-in: absent stays absent when the country has no figure either,
+      // because zero would read as pristine air (PR#1 N1).
+      const reference = atlas.countries.find((c) => c.iso2 === profile.country)?.env
       const current: Location = {
         id: 'current',
         name: 'your current area',
-        pm25: profile.pm25,
-        ndvi: profile.ndvi,
+        pm25: profile.pm25 ?? reference?.pm25 ?? undefined,
+        ndvi: profile.ndvi ?? reference?.ndvi ?? undefined,
         kind: 'city',
       }
       // Only the ENV term changes when relocating, so the person's other risk cancels: the year effect
