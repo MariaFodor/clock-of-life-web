@@ -88,20 +88,26 @@ describe('the atlas fixture', () => {
     const europe = (await import('./data/europe.geo.json')).default
     const known = new Set(fixture.countries.map((c) => c.iso3))
 
-    // A drawn shape with no row is a country coloured by nothing. The four the UN does not report on
-    // separately are named here rather than tolerated by a wildcard, so a fifth has to be justified.
+    // A drawn shape with no row is a country coloured by nothing. The ones the UN does not report on
+    // separately are named here rather than tolerated by a wildcard, so a new one has to be justified.
+    //
+    // KOSOVO WAS ON THIS LIST AND SHOULD NEVER HAVE BEEN. The bundle ships baselines/XK.json and the
+    // atlas serves Kosovo at 78.0 years; the shape was simply keyed KOS by Natural Earth while the row
+    // was keyed XKX by the UN, so the lookup missed and the map said "No life table is published for
+    // this territory" about a territory it was listing at 78.0 on the same page. The generator now
+    // aliases it, and this list is the three (and in Europe, two) for which the sentence is TRUE.
     expect(Object.keys(world.countries).filter((iso) => !known.has(iso)).sort())
-      .toEqual(['ATF', 'CYN', 'KOS', 'SOL'])   // French Southern Terrs., N. Cyprus, Kosovo, Somaliland
+      .toEqual(['ATF', 'CYN', 'SOL'])          // French Southern Terrs., N. Cyprus, Somaliland
     expect(Object.keys(europe.countries).filter((iso) => !known.has(iso)).sort())
-      .toEqual(['ALA', 'CYN', 'KOS'])          // + Åland, which Finland reports for
+      .toEqual(['ALA', 'CYN'])                 // + Åland, which Finland reports for
 
-    // The reverse is expected and is the reason the table is not decoration: 59 countries have a
-    // life table and no polygon at this scale — Singapore, Hong Kong, Monaco, Bahrain, Barbados,
+    // The reverse is expected and is the reason the table is not decoration: 58 countries have a
+    // life table and no polygon at this scale (59 until Kosovo's shape found its row) — Singapore, Hong Kong, Monaco, Bahrain, Barbados,
     // most of the Caribbean and the Pacific. A reader who cannot find them on the map must still be
     // able to find them at all.
     const drawn = new Set([...Object.keys(world.countries), ...Object.keys(europe.countries)])
     const shapeless = fixture.countries.filter((c) => !drawn.has(c.iso3!))
-    expect(shapeless.length).toBe(59)
+    expect(shapeless.length).toBe(58)
     for (const iso of ['SGP', 'HKG', 'MCO', 'BHR', 'MUS', 'MDV']) {
       expect(shapeless.some((c) => c.iso3 === iso), `${iso} should be table-only`).toBe(true)
     }

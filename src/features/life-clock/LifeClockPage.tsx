@@ -8,6 +8,16 @@ import { IntervalBadge, StatisticalEstimateNote, SafeguardNote } from '../../com
 import { PageHeader, Card, NeedsProfile, NoticeState } from '../../components/ui'
 import { fmtYears, riskVsAverage } from '../../components/format'
 
+/**
+ * The age at which the published life tables stop resolving individual years.
+ *
+ * UN WPP closes every table with one OPEN interval covering everyone 100 and over, so the estimate is
+ * flat across it by construction. The service's `remaining_le` prices that interval at the publisher's
+ * own figure for it; what it cannot do is tell a 104-year-old from a 110-year-old, because the source
+ * does not.
+ */
+const OPEN_INTERVAL_AGE = 100
+
 export function LifeClockPage() {
   const { profile, estimate } = useProfile()
   const benchmark = useBenchmark(profile)
@@ -102,6 +112,20 @@ export function LifeClockPage() {
               second sentence in the note below ("Centred on the average person in RO"), which named
               neither what was being compared nor the country. */}
           <p className="text-sm text-clock-ink">{riskSentence}</p>
+          {/* Above 100 the published life table stops resolving. The UN reports a single OPEN interval
+              for everyone aged 100 and over, so a reader of 104 and a reader of 110 are given the same
+              figure — not because the model thinks they are alike, but because the source cannot tell
+              them apart. Saying so beats letting someone conclude their age made no difference.
+              (Until v4.2.0 this was worse and silent: every age from 100 to 110 was priced at exactly
+              half a year, because the table's final interval was charged at the default half-year.) */}
+          {profile.age >= OPEN_INTERVAL_AGE && (
+            <p className="text-sm text-clock-muted">
+              Above {OPEN_INTERVAL_AGE}, the national life tables stop counting year by year: the UN
+              publishes one figure for everyone aged {OPEN_INTERVAL_AGE} and over. So this is the
+              estimate for that whole group, and it will not change as you get older — the source
+              cannot see the difference, so neither can this.
+            </p>
+          )}
           <StatisticalEstimateNote>
             This is a statistical estimate, not a prediction or diagnosis.
           </StatisticalEstimateNote>

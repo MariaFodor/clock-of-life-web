@@ -214,10 +214,30 @@ function frameEdge([w, s, e, n], step = 0.5) {
 }
 
 /** ISO_A3 is `-99` for France, Norway and a few disputed areas; ISO_A3_EH is the fixed-up field. */
+/**
+ * Codes Natural Earth spells differently from the UN, and therefore from the bundle the map is coloured
+ * from. One entry, and it is the whole of the table.
+ *
+ * Kosovo has four codes across the four files this product reads: Natural Earth says `KOS`, UN WPP and
+ * the bundle say `XKX`, WHO's air database says `KSV` (aliased in the model), and the baseline file is
+ * `XK.json`. Because the shape was keyed `KOS` and the atlas row `XKX`, the map could not find Kosovo's
+ * own numbers: it drew the country as "no figure" and its hover read "No life table is published for
+ * this territory" — while the ranked table on the SAME PAGE listed Kosovo at 78.0 years. The bundle
+ * ships `baselines/XK.json`, so the sentence was simply false.
+ *
+ * Measured before adding this, so it stays one entry rather than becoming a guess: of the 176 shapes in
+ * the world view, exactly four have no atlas row — KOS, and then CYN (Northern Cyprus), SOL (Somaliland)
+ * and ATF (the French Southern Territories), plus ALA (Åland) in the Europe view. For those four the
+ * "no life table is published" sentence is TRUE, and they must keep saying it.
+ */
+const ISO3_ALIASES = { KOS: 'XKX' }
+
 function isoOf(f) {
   for (const key of ['ISO_A3_EH', 'ISO_A3', 'ADM0_A3']) {
     const v = f.properties[key]
-    if (typeof v === 'string' && /^[A-Z]{3}$/.test(v) && v !== '-99') return v
+    if (typeof v === 'string' && /^[A-Z]{3}$/.test(v) && v !== '-99') {
+      return ISO3_ALIASES[v] ?? v
+    }
   }
   return null
 }

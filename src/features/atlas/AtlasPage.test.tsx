@@ -5,13 +5,28 @@ import { AtlasPage } from './AtlasPage'
 import { CLASSES } from './scale'
 import { renderWithProviders, SAMPLE_PROFILE } from '../../test/harness'
 
+/**
+ * A longer per-test timeout for this file alone.
+ *
+ * The World page is the heaviest thing this app renders: 176 SVG paths on first paint, and the air
+ * layer behind a dynamically imported 313 KB fixture. Under CPU contention (several suites at once,
+ * or a CI box running jobs in parallel) six of these tests time out at the default 5s while waiting
+ * for the very first render, and pass on their own. Measured: 310/310 on an idle machine, 304/310
+ * with other runs competing.
+ *
+ * Raising it does not hide a defect; it stops the gate reporting one that is not there. A gate that
+ * flakes under load is not a gate, and the answer is to give the slowest page the time it genuinely
+ * needs rather than to learn to ignore red.
+ */
+const SLOW_PAGE_MS = 20_000
+
 /** The legend row, as an ordered list: [low end, six swatch groups, high end, no-figure swatch]. */
 const legendRow = () => [...screen.getByTestId('map-legend-row').children]
 
 /** The first number a swatch group prints — the bottom of the value range it stands for. */
 const rangeStart = (el: Element): number => Number(/[\d.]+/.exec(el.textContent ?? '')![0])
 
-describe('<AtlasPage/>', () => {
+describe('<AtlasPage/>', { timeout: SLOW_PAGE_MS }, () => {
   it('draws the world and marks the reader’s own country', async () => {
     const { container } = renderWithProviders(<AtlasPage />, { profile: SAMPLE_PROFILE })
     await screen.findByTestId('mortality-map')
@@ -25,8 +40,10 @@ describe('<AtlasPage/>', () => {
     await screen.findByTestId('mortality-map')
     // Japan tops life expectancy for women, so it must land in the darkest class.
     expect(container.querySelector('[data-iso3="JPN"]')).toHaveAttribute('data-class', '5')
-    // Kosovo is drawn and the UN does not report on it; "no data" is a state, not a zero.
-    expect(container.querySelector('[data-iso3="KOS"]')).toHaveAttribute('data-class', 'none')
+    // Northern Cyprus is drawn and the UN does not report on it; "no data" is a state, not a zero.
+    // This used to name Kosovo, which the UN DOES report on — the shape was keyed KOS and the row XKX,
+    // so the lookup missed and "no figure" was the symptom, not the fact.
+    expect(container.querySelector('[data-iso3="CYN"]')).toHaveAttribute('data-class', 'none')
   })
 
   it('switches between women and men, and the numbers move with it', async () => {
@@ -93,12 +110,32 @@ describe('<AtlasPage/>', () => {
     const user = userEvent.setup()
     const { container } = renderWithProviders(<AtlasPage />, { profile: SAMPLE_PROFILE })
     await screen.findByTestId('mortality-map')
-    const kosovo = container.querySelector('[data-iso3="KOS"]') as SVGPathElement
-    expect(kosovo, 'Kosovo is drawn but the UN publishes no life table for it').not.toBeNull()
-    await user.click(kosovo)
+    // Northern Cyprus, not Kosovo. This test used to click KOS and assert "the UN publishes no life
+    // table for it" — which was FALSE: the bundle ships baselines/XK.json and the atlas serves Kosovo
+    // at 78.0 years. The shape was keyed KOS by Natural Earth while the row was keyed XKX by the UN,
+    // so the lookup missed, and the test encoded the resulting contradiction as intended behaviour.
+    // These four genuinely have no UN life table and must keep saying so.
+    const unreported = container.querySelector('[data-iso3="CYN"]') as SVGPathElement
+    expect(unreported, 'Northern Cyprus is drawn and the UN publishes no life table for it').not.toBeNull()
+    await user.click(unreported)
     // The reader's own country card must survive the click, and the map must say something.
     expect(await screen.findByTestId('country-card')).toBeInTheDocument()
     expect(screen.getByTestId('country-card')).toHaveTextContent('Romania')
+  })
+
+  it('shows Kosovo its own figures instead of telling it there are none', async () => {
+    const user = userEvent.setup()
+    const { container } = renderWithProviders(<AtlasPage />, { profile: SAMPLE_PROFILE })
+    await screen.findByTestId('mortality-map')
+    const kosovo = container.querySelector('[data-iso3="XKX"]') as SVGPathElement
+    expect(kosovo, 'Kosovo is drawn under the code the atlas keys it by').not.toBeNull()
+    // It has a value, so it is not painted as "no figure"…
+    expect(kosovo).not.toHaveAttribute('data-class', 'none')
+    await user.click(kosovo)
+    // …and the page names it rather than refusing it. The ranked table listed Kosovo at 78.0 years
+    // the whole time this said no life table was published.
+    expect(await screen.findByTestId('country-card')).toHaveTextContent(/Kosovo/i)
+    expect(document.body.textContent).not.toMatch(/No life table is published for this territory/i)
   })
 
   it('never tells a reader that darker means longer, on any measure', async () => {
@@ -249,7 +286,12 @@ describe('<AtlasPage/>', () => {
     const { container } = renderWithProviders(<AtlasPage />, { profile: SAMPLE_PROFILE })
     await screen.findByTestId('mortality-map')
     await user.click(screen.getByTestId('air-toggle'))
-    await screen.findByTestId('air-layer')
+    // A generous wait, because the air layer is behind a dynamically imported 313 KB fixture and the
+    // default 1s runs out under full-suite load — this test passed alone and failed one run in two
+    // alongside the others. A flaky gate is worse than a slow one: it makes green stop meaning
+    // anything. In the browser this path is an HTTP fetch behind a visible "Loading the monitoring
+    // stations…" state, not a bundler import, so the wait is a property of the mock, not the product.
+    await screen.findByTestId('air-layer', {}, { timeout: 10_000 })
 
     // Poland first, with nothing but the country under the pointer.
     fireEvent.mouseEnter(container.querySelector('[data-iso3="POL"]')!)

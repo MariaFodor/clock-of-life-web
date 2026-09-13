@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import world from './data/world.geo.json'
 import europe from './data/europe.geo.json'
+import fixture from './atlas.fixture.json'
 import type { AtlasGeometry } from './types'
 
 const VIEWS: [string, AtlasGeometry][] = [
@@ -177,4 +178,42 @@ describe('the projection is what it says it is', () => {
     const euro = Object.keys(E.countries)
     if (euro.includes('SMR')) expect(euro.indexOf('SMR')).toBeGreaterThan(euro.indexOf('ITA'))
   })
+})
+
+describe('every shape can find its own numbers', () => {
+  // Kosovo used to be drawn as "no figure" with a hover reading "No life table is published for this
+  // territory", while the ranked table on the SAME PAGE listed it at 78.0 years. The shape was keyed
+  // KOS (Natural Earth) and the atlas row XKX (UN WPP), so the lookup missed and the page contradicted
+  // itself. The bundle ships baselines/XK.json, so the sentence was simply false.
+  const atlasIso3 = new Set(
+    (fixture.countries as Array<{ iso3: string | null }>).map((c) => c.iso3).filter(Boolean) as string[],
+  )
+
+  /**
+   * The shapes that genuinely have no UN life table, and must KEEP saying so.
+   *
+   * This is an allowlist rather than a tolerance: anything drawn that is not here and has no atlas row
+   * is a country whose own numbers the map cannot find, which is how Kosovo went wrong.
+   */
+  const NO_UN_LIFE_TABLE = new Set([
+    'CYN', // Northern Cyprus
+    'SOL', // Somaliland
+    'ATF', // French Southern and Antarctic Lands — no resident population
+    'ALA', // Åland — reported within Finland
+  ])
+
+  for (const [view, geo] of [['world', world], ['europe', europe]] as const) {
+    it(`${view}: no shape is orphaned except the four with no UN life table`, () => {
+      const orphans = Object.keys(geo.countries).filter(
+        (iso3) => !atlasIso3.has(iso3) && !NO_UN_LIFE_TABLE.has(iso3),
+      )
+      expect(orphans, `these shapes cannot find their own atlas row`).toEqual([])
+    })
+
+    it(`${view}: Kosovo is keyed the way the atlas keys it`, () => {
+      expect(Object.keys(geo.countries)).toContain('XKX')
+      expect(Object.keys(geo.countries)).not.toContain('KOS')
+      expect(atlasIso3.has('XKX')).toBe(true)
+    })
+  }
 })
