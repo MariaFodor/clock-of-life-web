@@ -338,9 +338,24 @@ const SLEEP_HOURS: Record<string, number> = { u5: 4.5, '5-6': 5.5, '7-8': 7.5, '
 const SITTING_MID: Record<string, number> = { u4: 3, '4-6': 5, '6-8': 7, '8-10': 9, '10+': 11 }
 const ALC_LEVELS = ['none', 'light', 'moderate', 'heavy'] as const
 
+/**
+ * Starting values for the questions where a population-typical answer is a fair placeholder a reader
+ * can correct — and DELIBERATELY NOT for the three that decide whose life table the estimate reads.
+ *
+ * COUNTRY, AGE and SEX are absent on purpose. They are not context: they select the row of the national
+ * life table the years are counted down from, and the average person the relative risk is centred on.
+ * Pre-filled, they made the app hand a reader who clicked straight through a 45-year-old Romanian
+ * woman's estimate and call it theirs. A 70-year-old man got someone else's number, presented as his,
+ * with nothing on screen saying so.
+ *
+ * `buildProfile` raises an error for each one that is missing, which disables the calculate button and
+ * prints the reason — the same mechanism the country question already used.
+ *
+ * The rest stay. A default waist or sleep is a stated population figure the reader can see and change,
+ * and each one's own answer is visible on the page next to it; getting those wrong shifts the estimate,
+ * while getting age, sex or country wrong makes it an estimate about a different person.
+ */
 export const DEFAULT_ANSWERS: Answers = {
-  AGE: 45,
-  SEX: 'F',
   EDU: 'vocational',
   INCOME: 'middle',
   SMK: 'never',
@@ -366,7 +381,20 @@ export function buildProfile(a: Answers): ProfileDraft {
   const num = (v: unknown) => (typeof v === 'number' ? v : Number(v))
 
   const age = num(a.AGE)
-  if (!Number.isFinite(age) || age < 18 || age > 110) errors.push('Age must be between 18 and 110.')
+  // Separated from the range check so the two say different things. "Age must be between 18 and 110"
+  // is advice to someone who typed something; a reader who has not answered yet has typed nothing, and
+  // telling them their blank is out of range is the wrong sentence.
+  if (a.AGE === undefined || a.AGE === '') {
+    errors.push('Tell us your age — it decides where on the national life table your estimate starts.')
+  } else if (!Number.isFinite(age) || age < 18 || age > 110) {
+    errors.push('Age must be between 18 and 110.')
+  }
+  if (a.SEX !== 'M' && a.SEX !== 'F') {
+    errors.push(
+      'Tell us your sex — men and women have separate life tables, so the estimate reads a different ' +
+        'one for each.',
+    )
+  }
 
   const waist = num(a.WAIST)
   if (!Number.isFinite(waist) || waist < 40 || waist > 250) errors.push('Waist must be between 40 and 250 cm.')

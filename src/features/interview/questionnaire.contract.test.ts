@@ -97,7 +97,17 @@ describe('aggregation formulas (LEV-04)', () => {
     // COUNTRY is part of a real profile now and deliberately NOT in DEFAULT_ANSWERS: a pre-filled
     // country would be the most harmful default in the questionnaire, since it picks the life table.
     // buildProfile says so through `errors` when it is missing, so the fixture supplies it.
-    const smoker = { ...DEFAULT_ANSWERS, COUNTRY: { iso2: 'RO', iso3: 'ROU', name: 'Romania' }, SMK: 'current' as const }
+    // Country, age and sex are all part of a real profile now and deliberately absent from
+    // DEFAULT_ANSWERS: each one selects WHOSE life table is read, so a pre-filled value is not a
+    // placeholder but a different person. buildProfile says so through `errors`; the fixture supplies
+    // them so this test can be about the smoking dose it is actually checking.
+    const smoker = {
+      ...DEFAULT_ANSWERS,
+      COUNTRY: { iso2: 'RO', iso3: 'ROU', name: 'Romania' },
+      AGE: 45,
+      SEX: 'F' as const,
+      SMK: 'current' as const,
+    }
     expect(buildProfile({ ...smoker, CIGS: 75 }).profile.cigs_day).toBe(75)
     expect(buildProfile({ ...smoker, CIGS: 75 }).errors).toEqual([])
     expect(buildProfile({ ...smoker, CIGS: 80 }).profile.cigs_day).toBe(80)
@@ -155,7 +165,12 @@ describe('how much of the interview is answered (UX-6)', () => {
   it('counts the questions on screen, and the standard answers among them', () => {
     // The starting state of a first visit. Both numbers are pinned rather than derived here: a
     // question added to the questionnaire should make somebody look at this line and agree with it.
-    expect(answerProgress(DEFAULT_ANSWERS)).toEqual({ answered: 12, total: 24 })
+    //
+    // 10, not 12: age and sex lost their defaults when country did, because all three select WHOSE
+    // life table is read rather than shading the answer. A first visit now genuinely starts with
+    // three of the twenty-five unanswered, and the bar says so instead of counting a stranger's
+    // age and sex as the reader's own.
+    expect(answerProgress(DEFAULT_ANSWERS)).toEqual({ answered: 10, total: 24 })
   })
 
   it('grows the total when an answer reveals more questions', () => {
@@ -216,6 +231,51 @@ describe('how much of the interview is answered (UX-6)', () => {
     // Every grade a section actually carries is one the record words.
     for (const section of SECTIONS) {
       if (section.confidence) expect(CONFIDENCE_LABEL[section.confidence]).toBeTruthy()
+    }
+  })
+})
+
+describe('the three answers that decide whose life table is read', () => {
+  // Country, age and sex are not context — they select the row of the national life table the years
+  // are counted from, and the average person the risk is centred on. Pre-filled, they let a reader who
+  // clicked straight through receive a 45-year-old Romanian woman's estimate presented as their own.
+  const COMPLETE = {
+    ...DEFAULT_ANSWERS,
+    COUNTRY: { iso2: 'RO', iso3: 'ROU', name: 'Romania' },
+    AGE: 70,
+    SEX: 'M' as const,
+  }
+
+  it('are absent from the defaults, so nobody is answered for', () => {
+    expect(DEFAULT_ANSWERS.COUNTRY).toBeUndefined()
+    expect(DEFAULT_ANSWERS.AGE).toBeUndefined()
+    expect(DEFAULT_ANSWERS.SEX).toBeUndefined()
+  })
+
+  it('each blocks the estimate on its own, and says why', () => {
+    expect(buildProfile(COMPLETE).errors).toEqual([])
+
+    const noAge = buildProfile({ ...COMPLETE, AGE: undefined }).errors
+    expect(noAge.join(' ')).toMatch(/where on the national life table your estimate starts/i)
+    // NOT the range message: a reader who has answered nothing has not typed something out of range.
+    expect(noAge.join(' ')).not.toMatch(/must be between 18 and 110/i)
+
+    expect(buildProfile({ ...COMPLETE, SEX: undefined }).errors.join(' '))
+      .toMatch(/men and women have separate life tables/i)
+    expect(buildProfile({ ...COMPLETE, COUNTRY: undefined }).errors.join(' '))
+      .toMatch(/would be about somewhere else/i)
+  })
+
+  it('still tells someone who typed a real but impossible age that it is out of range', () => {
+    const errors = buildProfile({ ...COMPLETE, AGE: 7 }).errors
+    expect(errors.join(' ')).toMatch(/must be between 18 and 110/i)
+  })
+
+  it('the answers that remain defaulted are the ones a wrong value only shifts', () => {
+    // Waist, sleep, activity and the rest move the estimate; they do not change whose estimate it is.
+    // They keep their population-typical starting values, which the reader can see and correct.
+    for (const key of ['EDU', 'INCOME', 'SMK', 'SLEEP', 'WAIST', 'HEIGHT', 'WEIGHT']) {
+      expect(DEFAULT_ANSWERS[key], `${key} should still have a starting value`).toBeDefined()
     }
   })
 })

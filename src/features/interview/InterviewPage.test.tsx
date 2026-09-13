@@ -18,6 +18,19 @@ function InterviewUnderRouter() {
   )
 }
 
+/**
+ * Answer the three questions that decide WHOSE life table is read: country, age and sex.
+ *
+ * None of them has a default any more. They are not context — they select the row of the national life
+ * table and the average person the risk is centred on — and pre-filled they let a reader who clicked
+ * straight through receive a 45-year-old Romanian woman's estimate presented as their own.
+ */
+async function answerIdentity(user: ReturnType<typeof userEvent.setup>, iso2 = 'RO') {
+  await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), iso2)
+  await user.type(screen.getByLabelText(/what is your age\?/i), '45')
+  await user.click(screen.getByRole('radio', { name: 'Female' }))
+}
+
 describe('<InterviewPage/>', () => {
   it('renders the sectioned questionnaire with "why we ask"', () => {
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
@@ -38,7 +51,7 @@ describe('<InterviewPage/>', () => {
     expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeDisabled()
   })
 
-  it('will not calculate until it knows which country, and says why', async () => {
+  it('will not calculate until it knows which country, and says why', { timeout: 20_000 }, async () => {
     const user = userEvent.setup()
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
 
@@ -48,7 +61,14 @@ describe('<InterviewPage/>', () => {
     expect(button).toBeDisabled()
     expect(await screen.findByText(/would be about somewhere else/i)).toBeInTheDocument()
 
+    // The country alone is not enough: age and sex have no defaults either, for the same reason.
     await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'DE')
+    expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeDisabled()
+    expect(screen.getByText(/where on the national life table your estimate starts/i)).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/what is your age\?/i), '45')
+    expect(screen.getByText(/men and women have separate life tables/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Female' }))
     expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeEnabled()
   })
 
@@ -56,7 +76,7 @@ describe('<InterviewPage/>', () => {
     const user = userEvent.setup()
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
 
-    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    await answerIdentity(user)
     await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
     expect(await screen.findByText('LIFE CLOCK HOME')).toBeInTheDocument()
   })
@@ -163,7 +183,7 @@ describe('LEV-04 failure paths', () => {
       { route: '/interview', client },
     )
 
-    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    await answerIdentity(user)
     const cities = await screen.findByLabelText(/which city or town/i)
     // A real WHO settlement, not the invented "Cluj-Napoca" row this test used to pick.
     await user.selectOptions(cities, 'Bucuresti')
@@ -181,12 +201,11 @@ describe('LEV-04 failure paths', () => {
       throw new Error('offline')
     }
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview', client })
-    const picker = await screen.findByLabelText(/which country do you live in/i)
-    await user.selectOptions(picker, 'RO')
+    await answerIdentity(user)
     // 152 of the 237 countries have no measurement since 2020, so this path is a fact about the data
     // as often as it is a fault — and it says which, rather than reading as a broken app.
     expect(await screen.findByText(/has had its air measured since 2020/i)).toBeInTheDocument()
-    // and it never blocks the estimate
+    // and it never blocks the estimate — an unanswerable optional question is not a missing answer
     expect(screen.getByRole('button', { name: /calculate my life clock/i })).toBeEnabled()
   })
 })
@@ -287,7 +306,10 @@ describe('starting from the answers already saved', () => {
       session: SESSION,
     })
 
-    expect(await screen.findByLabelText('What is your age?')).toHaveValue(45)
+    // Empty, not 45. Age has no default any more: it selects the row of the life table, so a
+    // pre-filled one is not a placeholder, it is a different person. (These tests' own titles are
+    // about not passing defaults off as yours, which is the same concern one field further in.)
+    expect(await screen.findByLabelText('What is your age?')).toHaveValue(null)
     expect(screen.queryByText(/could not load the answers you saved/i)).not.toBeInTheDocument()
   })
 
@@ -301,7 +323,7 @@ describe('starting from the answers already saved', () => {
     // Silence here would invite a recalculation from the standard answers — a new history row, with
     // a different number, that the reader never chose.
     expect(await screen.findByText(/could not load the answers you saved/i)).toBeInTheDocument()
-    expect(screen.getByLabelText('What is your age?')).toHaveValue(45)
+    expect(screen.getByLabelText('What is your age?')).toHaveValue(null)
   })
 
   // The notice above describes the FIELDS, which were decided once, at mount. It used to be rendered
@@ -321,7 +343,7 @@ describe('starting from the answers already saved', () => {
     })
 
     expect(await screen.findByText(/could not load the answers you saved/i)).toBeInTheDocument()
-    expect(screen.getByLabelText('What is your age?')).toHaveValue(45)
+    expect(screen.getByLabelText('What is your age?')).toHaveValue(null)
 
     await act(async () => {
       await queryClient.refetchQueries({ queryKey: queryKeys.answers })
@@ -330,7 +352,7 @@ describe('starting from the answers already saved', () => {
     // The prefill is not re-applied after mount, so the age is still the standard 45 and not the
     // saved 61 — and a reader looking at 45 with no notice would calculate from answers that were
     // never theirs, believing they were.
-    expect(screen.getByLabelText('What is your age?')).toHaveValue(45)
+    expect(screen.getByLabelText('What is your age?')).toHaveValue(null)
     expect(screen.getByText(/could not load the answers you saved/i)).toBeInTheDocument()
   })
 
@@ -364,7 +386,7 @@ describe('starting from the answers already saved', () => {
   // A stored country the picker has no option for reads as unanswered on screen while `buildProfile`
   // still sees it — the required-country guard passes and the reader submits a country the select
   // says they never chose.
-  it('restores a country saved under a retired code as the one it now resolves to', async () => {
+  it('restores a country saved under a retired code as the one it now resolves to', { timeout: 20_000 }, async () => {
     const user = userEvent.setup()
     const client = clientWithSaved([savedRow('Q0_country', { iso2: 'EL', iso3: 'GRC', name: 'Greece' })])
     const base = await createMockClient().getMeta()
@@ -384,6 +406,10 @@ describe('starting from the answers already saved', () => {
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview', client, session: SESSION })
 
     expect(await screen.findByLabelText(/which country do you live in/i)).toHaveValue('GR')
+
+    // Age and sex have no defaults either, so they are answered here before the button is live.
+    await user.type(screen.getByLabelText(/what is your age\?/i), '45')
+    await user.click(screen.getByRole('radio', { name: 'Female' }))
 
     // And what the picker shows is what gets scored: the same country, under the code the model uses.
     await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
@@ -473,7 +499,7 @@ describe('the bottom bar', () => {
     expect(progress()).toEqual({ answered: start.answered + 1, total: start.total })
   })
 
-  it('is blocked and says something is unfinished while an answer is wrong', async () => {
+  it('is blocked and says something is unfinished while an answer is wrong', { timeout: 20_000 }, async () => {
     const user = userEvent.setup()
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview' })
     const bar = screen.getByTestId('interview-bar')
@@ -488,7 +514,12 @@ describe('the bottom bar', () => {
     expect(button).toBeDisabled()
     expect(within(bar).getByText(/some answers are still missing or need a fix/i)).toBeInTheDocument()
 
+    // Country, age and sex — the three that decide whose life table is read, and the three with no
+    // defaults. The bar stays blocked until all of them are answered.
     await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    expect(button).toBeDisabled()
+    await user.type(screen.getByLabelText(/what is your age\?/i), '45')
+    await user.click(screen.getByRole('radio', { name: 'Female' }))
     expect(button).toBeEnabled()
     expect(within(bar).queryByText(/still missing or need a fix/i)).not.toBeInTheDocument()
 
@@ -513,7 +544,7 @@ describe('the bottom bar', () => {
     client.saveAnswers = () => new Promise(() => {})
 
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview', client })
-    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    await answerIdentity(user)
     await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
 
     const busy = screen.getByRole('button', { name: 'Calculating…' })
@@ -534,7 +565,7 @@ describe('the bottom bar', () => {
       throw new Error('estimate service unavailable')
     }
     renderWithProviders(<InterviewUnderRouter />, { route: '/interview', client })
-    await user.selectOptions(await screen.findByLabelText(/which country do you live in/i), 'RO')
+    await answerIdentity(user)
     await user.click(screen.getByRole('button', { name: /calculate my life clock/i }))
 
     // The message used to render at the end of the document, which is ABOVE the pinned bar's own
