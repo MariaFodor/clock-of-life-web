@@ -364,7 +364,7 @@ describe('the top bar and the interview bar share the screen', () => {
 })
 
 describe('the footer provenance line', () => {
-  it('is the short honest sentence below md, with the reference population still one tap away', async () => {
+  it('is the short honest sentence below md, with the scored countries still one tap away', async () => {
     const { client } = renderWithProviders(<AppLayout>{null}</AppLayout>)
     const meta = await client.getMeta()
 
@@ -376,7 +376,7 @@ describe('the footer provenance line', () => {
 
     // Not deleted, just folded away — and folded rather than hung on a `title`, because a phone has
     // no hover to reveal a title with.
-    const disclosure = screen.getByText('Reference population').closest('details')!
+    const disclosure = screen.getByText('Countries scored').closest('details')!
     expect(disclosure.className).toContain('md:hidden')
     expect(disclosure).toHaveTextContent(meta.countries.join(', '))
   })
@@ -391,7 +391,7 @@ describe('the footer provenance line', () => {
     expect(provenance.className).toContain('hidden')
     expect(provenance.className).toContain('md:inline')
     expect(provenance.parentElement).toHaveTextContent(
-      `Model ${meta.model_version} · ${meta.algorithm} · reference population ${meta.countries.join(', ')} — a statistical estimate, not a prediction.`,
+      `Model ${meta.model_version} · ${meta.algorithm} · scored for ${meta.countries.join(', ')} — a statistical estimate, not a prediction.`,
     )
   })
 })
