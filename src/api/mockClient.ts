@@ -113,7 +113,17 @@ export function createMockClient(): ApiClient {
         attributions: attributions(profile),
         created_at: new Date().toISOString(),
       })
-      return { ...s, calculation_id: id }
+      // Fields picked rather than spread: `scoreEstimate` also carries `national_avg_years`, which
+      // the HTTP client deliberately keeps off `Estimate`. Spreading it here would let a surface read
+      // a field that works against the mock and is undefined in the browser.
+      return {
+        estimate_years: s.estimate_years,
+        interval: s.interval,
+        reaches_age: s.reaches_age,
+        relative_risk: s.relative_risk,
+        country: s.country,
+        calculation_id: id,
+      }
     },
 
     async whatif(base: Profile, changes: WhatIfChanges): Promise<WhatIf> {

@@ -45,11 +45,11 @@ export interface HttpError extends Error {
   status: number
 }
 
-async function request<T>(path: string, init: RequestInit = {}, skipAuth = false): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   if (init.body) headers.set('Content-Type', 'application/json')
   const token = getToken()
-  if (token && !skipAuth) headers.set('Authorization', `Bearer ${token}`)
+  if (token) headers.set('Authorization', `Bearer ${token}`)
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers })
   if (!res.ok) {
@@ -69,8 +69,8 @@ async function request<T>(path: string, init: RequestInit = {}, skipAuth = false
   return (await res.json()) as T
 }
 
-const post = <T>(path: string, body: unknown, skipAuth = false) =>
-  request<T>(path, { method: 'POST', body: JSON.stringify(body) }, skipAuth)
+const post = <T>(path: string, body: unknown) =>
+  request<T>(path, { method: 'POST', body: JSON.stringify(body) })
 const get = <T>(path: string) => request<T>(path)
 
 // ── mapping helpers ───────────────────────────────────────────────────────────
@@ -93,8 +93,21 @@ const round1 = (x: number) => Math.round(x * 10) / 10
 
 /** Server /api/estimate response — Estimate fields plus why/model/calculation_id. */
 interface EstimateEnvelope extends Estimate {
-  /** scoring.rs serves this beside `relative_risk`; only the benchmark reads it. */
-  national_avg_years: number
+  /**
+   * scoring.rs serves this beside `relative_risk`; only the benchmark reads it.
+   *
+   * OPTIONAL on purpose, and this type is a cast over `res.json()` with no runtime validation, so
+   * "required" here would only have been a promise about a server we do not control. Two ways it is
+   * legitimately absent: a service older than this change, and a country whose bundle has no
+   * measured prevalence (Switzerland today), where the service withholds it rather than serve a
+   * figure its own artifact calls mis-centred.
+   *
+   * Declaring it required cost a white screen, not a missing card: `avgCache.set(key, undefined)`
+   * leaves `Map.has()` TRUE, so the re-estimate guard never re-fires, `round1(x - undefined)` is
+   * NaN, `LifeClockPage` gates on a truthy object so the card still renders, and `fmtYears` calls
+   * `undefined.toFixed(1)`. There is no error boundary in this app, so that throw unmounts the root.
+   */
+  national_avg_years?: number | null
   why: Array<{
     key: string; factor: string; delta_years: number; evidence: string; role: string
     citation: string
@@ -120,13 +133,14 @@ export function createHttpClient(): ApiClient {
   // just estimated.
   const whyCache = new Map<string, Attribution[]>()
   const yearsCache = new Map<string, number>()
-  const avgCache = new Map<string, number>()
+  // `number | null`, never absent. Skipping the write on a missing field would leave `has()` false,
+  // so every getBenchmark would re-POST /estimate — with the caller's auth, writing a history row per
+  // view of the card. The null sentinel keeps the entry present and the meaning explicit.
+  const avgCache = new Map<string, number | null>()
   const keyOf = (p: Profile) => JSON.stringify(p)
 
-  // skipAuth routes the write to the shared anonymous account instead of the caller's — used for the
-  // benchmark's "average person" reference so it never appears in the user's own history.
-  const runEstimate = async (profile: Profile, skipAuth = false): Promise<EstimateEnvelope> => {
-    const env = await post<EstimateEnvelope>('/estimate', profile, skipAuth)
+  const runEstimate = async (profile: Profile): Promise<EstimateEnvelope> => {
+    const env = await post<EstimateEnvelope>('/estimate', profile)
     whyCache.set(
       keyOf(profile),
       env.why.map((w) => ({
@@ -145,7 +159,12 @@ export function createHttpClient(): ApiClient {
       })),
     )
     yearsCache.set(keyOf(profile), env.estimate_years)
-    avgCache.set(keyOf(profile), env.national_avg_years)
+    avgCache.set(
+      keyOf(profile),
+      typeof env.national_avg_years === 'number' && Number.isFinite(env.national_avg_years)
+        ? env.national_avg_years
+        : null,
+    )
     return env
   }
 
@@ -199,8 +218,13 @@ export function createHttpClient(): ApiClient {
       // here: scoring the invented reference posted it to the shared anonymous account, so every view
       // of this card wrote a fictional healthy person into the aggregates.
       if (!yearsCache.has(key) || !avgCache.has(key)) await runEstimate(profile)
-      const userYears = yearsCache.get(key)!
-      const avgYears = avgCache.get(key)!
+      const userYears = yearsCache.get(key)
+      const avgYears = avgCache.get(key)
+      // Throwing puts the query in its error state, so `LifeClockPage`'s `benchmark.data &&` drops
+      // the card. No comparison is the honest outcome when there is no average to compare against.
+      if (userYears === undefined || avgYears === undefined || avgYears === null) {
+        throw new Error('no national average is available for this country')
+      }
       return { national_avg_years: avgYears, delta_years: round1(userYears - avgYears) }
     },
 

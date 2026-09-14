@@ -59,6 +59,49 @@ describe('the benchmark average', () => {
     expect(bodies[0]).toMatchObject({ smoke: 2 })
   })
 
+  it('shows no card rather than a broken one when the service sends no average', async () => {
+    // The version this guards against declared `national_avg_years` required on a type that is a cast
+    // over res.json(). Against a service that does not send it — an older deployment, or a country
+    // whose bundle has no measured prevalence — `avgCache.set(key, undefined)` left `Map.has()` true,
+    // so the re-estimate guard never re-fired, the delta became NaN, the card still rendered because
+    // LifeClockPage gates on a truthy object, and `fmtYears` called `undefined.toFixed(1)`. With no
+    // error boundary in this app, that throw unmounts the root: a white screen for the whole app.
+    //
+    // Rejecting instead puts the query in its error state and the card simply does not render.
+    const { national_avg_years: _omitted, ...withoutTheField } = served
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify(withoutTheField), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    await expect(
+      createHttpClient().getBenchmark({ ...SAMPLE_PROFILE, country: 'CY', age: 32, sex: 'F' }),
+    ).rejects.toThrow(/no national average/)
+  })
+
+  it('shows no card for a country whose average the service withholds', async () => {
+    // Switzerland: the bundle records that its reference person is not an average Swiss person, so
+    // the service sends null rather than a figure its own artifact calls mis-centred.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ ...served, country: 'CH', national_avg_years: null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    await expect(
+      createHttpClient().getBenchmark({ ...SAMPLE_PROFILE, country: 'CH', age: 40, sex: 'M' }),
+    ).rejects.toThrow(/no national average/)
+  })
+
   it('never points the opposite way from the risk ratio, on either client', async () => {
     const client = createMockClient()
     const variants: Profile[] = [
