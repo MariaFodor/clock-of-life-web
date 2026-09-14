@@ -117,7 +117,9 @@ describe('the shell at phone width — which shape shows (Tailwind decides; the 
     renderShell()
 
     // `invisible`, not just a translate: something merely pushed off-screen is still tabbable and
-    // still read out, so a closed menu would hand a keyboard eight links to nowhere.
+    // still read out, so a closed menu would hand a keyboard every nav link to nowhere. (A count
+    // was written here once and went stale the moment a surface was removed; the point was never the
+    // number.)
     expect(primaryNav().className).toContain('-translate-x-full')
     expect(primaryNav().className).toContain('invisible')
     expect(primaryNav().className).toContain('md:visible')

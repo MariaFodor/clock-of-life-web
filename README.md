@@ -17,7 +17,6 @@ hand-authored **`<LifeClock/>` SVG**. See `../architecture/web/web-architecture.
 | `/what-if` | **What If?** | non-persisted lever overlay (smoke / activity / sleep / waist) |
 | `/relocate` | **Where Should I Live?** | compare places on PM2.5 & greenspace |
 | `/progress` | **My Progress** | history of persisted `calculation` rows |
-| `/stats` | **Statistics** | cohort dashboards, k ≥ 20 gated |
 | `/interview` | onboarding | the questionnaire (10 sections), "why we ask" |
 
 Login is pseudonymous (a handle only; no credentials handled in the client).
@@ -27,7 +26,7 @@ Login is pseudonymous (a handle only; no credentials handled in the client).
 Every network call goes through `src/api/client.ts` (`ApiClient`). Today it is backed by
 `src/api/mockClient.ts` — a deterministic in-memory implementation whose types (`src/api/types.ts`)
 **mirror the live service contract** (`estimate` / `whatif` / `calculations` / `answers` / `meta`).
-Surfaces with no backend endpoint yet (Why / Improve / Relocate / Stats) are served by the same mock,
+Surfaces with no backend endpoint yet (Why / Improve / Relocate) are served by the same mock,
 contract-shaped, so they can be built ahead of their endpoints. When the generated OpenAPI client lands,
 only the client install in `src/main.tsx` changes — pages and hooks are untouched.
 
