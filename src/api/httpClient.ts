@@ -93,6 +93,8 @@ const round1 = (x: number) => Math.round(x * 10) / 10
 
 /** Server /api/estimate response — Estimate fields plus why/model/calculation_id. */
 interface EstimateEnvelope extends Estimate {
+  /** scoring.rs serves this beside `relative_risk`; only the benchmark reads it. */
+  national_avg_years: number
   why: Array<{
     key: string; factor: string; delta_years: number; evidence: string; role: string
     citation: string
@@ -100,27 +102,17 @@ interface EstimateEnvelope extends Estimate {
   }>
 }
 
-/** A reference "average person" of the same age & sex, for the benchmark comparison (RR ≈ 1). */
-function referenceProfile(p: Profile): Profile {
-  return {
-    country: p.country,
-    age: p.age,
-    sex: p.sex,
-    smoke: 0,
-    pa_min: 600,
-    sleep: 7,
-    waist: p.sex === 'F' ? 84 : 96,
-    bmi: 25.5,
-    cigs_day: 0,
-    income: 2.5,
-    diabetes: false,
-    high_bp: false,
-    respiratory: false,
-    cvd_hx: false,
-    cancer_hx: false,
-    higher_educ: false,
-  }
-}
+// The "average person" this file used to build by hand is GONE, and deliberately not replaced by a
+// better hand-built one. It was: never smoked, 600 MET-min/week, BMI 25.5, no conditions — which the
+// model scores at 0.58x, not 1.0. So the Life Clock compared a reader against a healthy invention
+// while labelling it "the average person of your age and sex", directly under a risk figure centred
+// on the country's real prevalence-weighted population. The two disagreed, and the invention usually
+// won: a Cypriot woman of 32 at 0.60x risk was told she was 0.2 years BELOW average when the life
+// table puts her 4.2 above it.
+//
+// No profile assembled on this side can be the average person — the average is a property of the
+// country's life table, which only the service holds. It now arrives as `national_avg_years` on the
+// same response that carries `relative_risk`, so the two cannot come apart again.
 
 export function createHttpClient(): ApiClient {
   // Cache the "why" breakdown and the point estimate from each /api/estimate call, keyed by the exact
@@ -128,6 +120,7 @@ export function createHttpClient(): ApiClient {
   // just estimated.
   const whyCache = new Map<string, Attribution[]>()
   const yearsCache = new Map<string, number>()
+  const avgCache = new Map<string, number>()
   const keyOf = (p: Profile) => JSON.stringify(p)
 
   // skipAuth routes the write to the shared anonymous account instead of the caller's — used for the
@@ -152,6 +145,7 @@ export function createHttpClient(): ApiClient {
       })),
     )
     yearsCache.set(keyOf(profile), env.estimate_years)
+    avgCache.set(keyOf(profile), env.national_avg_years)
     return env
   }
 
@@ -201,8 +195,12 @@ export function createHttpClient(): ApiClient {
 
     async getBenchmark(profile: Profile): Promise<Benchmark> {
       const key = keyOf(profile)
-      const userYears = yearsCache.get(key) ?? (await runEstimate(profile)).estimate_years
-      const avgYears = (await runEstimate(referenceProfile(profile), true)).estimate_years
+      // One call, one life table, both numbers. This also stops the second estimate that used to run
+      // here: scoring the invented reference posted it to the shared anonymous account, so every view
+      // of this card wrote a fictional healthy person into the aggregates.
+      if (!yearsCache.has(key) || !avgCache.has(key)) await runEstimate(profile)
+      const userYears = yearsCache.get(key)!
+      const avgYears = avgCache.get(key)!
       return { national_avg_years: avgYears, delta_years: round1(userYears - avgYears) }
     },
 
