@@ -12,7 +12,6 @@ import type {
   AuthResult,
   Benchmark,
   CalcRow,
-  CohortStat,
   Estimate,
   Location,
   Ontology,
@@ -54,7 +53,6 @@ export interface ApiClient {
    * refuse that outright, and before that answer it wrongly.
    */
   relocate(profile: Profile, candidateId: string, toCountry?: string): Promise<RelocateResult>
-  getStats(): Promise<CohortStat[]>
 
   /** Population life expectancy for every country the model carries a life table for. */
   getAtlas(): Promise<AtlasData>

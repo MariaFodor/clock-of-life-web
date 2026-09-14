@@ -15,7 +15,6 @@ import type {
   Attribution,
   Benchmark,
   CalcRow,
-  CohortStat,
   Estimate,
   Location,
   Ontology,
@@ -473,22 +472,5 @@ export function createMockClient(): ApiClient {
       return (mod.default ?? mod) as unknown as AtlasEnvironment
     },
 
-    async getStats(): Promise<CohortStat[]> {
-      // k-gated: cohorts under 20 are suppressed and never report a mean (privacy, api-and-scoring.md).
-      const raw: Array<{ label: string; size: number; mean: number }> = [
-        { label: 'Age 30–39', size: 142, mean: 47.8 },
-        { label: 'Age 40–49', size: 98, mean: 38.9 },
-        { label: 'Age 50–59', size: 61, mean: 29.4 },
-        { label: 'Non-smokers', size: 210, mean: 41.2 },
-        { label: 'Current smokers', size: 34, mean: 33.7 },
-        { label: 'Age 80+', size: 12, mean: 8.1 }, // suppressed (k < 20)
-      ]
-      return raw.map((r) => ({
-        label: r.label,
-        cohort_size: r.size,
-        suppressed: r.size < 20,
-        mean_estimate_years: r.size < 20 ? null : r.mean,
-      }))
-    },
   }
 }

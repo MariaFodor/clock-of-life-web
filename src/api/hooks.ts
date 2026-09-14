@@ -9,7 +9,6 @@ export const queryKeys = {
   calculations: ['calculations'] as const,
   answers: ['answers'] as const,
   locations: ['locations'] as const,
-  stats: ['stats'] as const,
   why: (p: Profile | null) => ['why', p] as const,
   recommendations: (p: Profile | null) => ['recommendations', p] as const,
   benchmark: (p: Profile | null) => ['benchmark', p] as const,
@@ -80,10 +79,6 @@ export function useAtlasEnvironment(enabled: boolean) {
     staleTime: Infinity,
     enabled,
   })
-}
-
-export function useStats() {
-  return useQuery({ queryKey: queryKeys.stats, queryFn: () => getClient().getStats() })
 }
 
 export function useWhy(profile: Profile | null) {
