@@ -180,6 +180,29 @@ describe('the risk figure in words', () => {
     expect(clause).toHaveTextContent(/years of life left/i)
     expect(clause).toHaveTextContent(/chance of dying in a year/i)
   })
+
+  it('says the average is missing instead of quietly dropping the card', async () => {
+    // Switzerland's bundle records that its reference person is not an average Swiss person and that
+    // the relative risk is overstated, so the service withholds the average. Dropping the card would
+    // delete the page's only definition of "average" while leaving two uses of the word above it —
+    // and would suppress the honest figure while keeping the biased one.
+    const client = createMockClient()
+    renderWithProviders(<LifeClockPage />, {
+      ...withRisk(0.6),
+      client: {
+        ...client,
+        getBenchmark: async () => ({ national_avg_years: null, delta_years: null }),
+      },
+    })
+
+    const card = await screen.findByText(/no measured average/i)
+    expect(card).toHaveTextContent(/does not show one/i)
+    // And the risk sentence stops claiming a comparison with people in that country.
+    expect(screen.queryByText(/Compared with the average person in/i)).toBeNull()
+    expect(await screen.findByText(/that reference was never measured/i)).toBeInTheDocument()
+    // The definition clause belongs to the comparison; with no comparison it must not appear.
+    expect(screen.queryByText(/“Average” here means/i)).toBeNull()
+  })
 })
 
 describe('carried notices', () => {

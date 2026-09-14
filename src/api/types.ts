@@ -254,10 +254,17 @@ export interface RelocateResult {
 
 /** How the user's estimate compares to the average person of the same age & sex (Life Clock surface). */
 export interface Benchmark {
-  /** average remaining years for the reference person at this age & sex (RR = 1) */
-  national_avg_years: number
-  /** user's estimate minus the national average (positive = above average) */
-  delta_years: number
+  /**
+   * The country's life-table average for this age & sex (RR = 1), or `null` when there is none to
+   * compare against — a service older than the field, or a country whose bundle has no measured
+   * prevalence and whose average the service therefore withholds (Switzerland).
+   *
+   * Null rather than an absent Benchmark, so a page can tell "we have no average here" apart from
+   * "the request failed" and say the right thing about each.
+   */
+  national_avg_years: number | null
+  /** user's estimate minus the national average (positive = above average); null with no average */
+  delta_years: number | null
 }
 
 /** Cohort aggregate for the Statistics surface — always k-gated (k ≥ 20). */

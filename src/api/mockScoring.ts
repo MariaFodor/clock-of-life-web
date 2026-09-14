@@ -246,6 +246,7 @@ export interface EstimateResult {
   interval: [number, number]
   reaches_age: number
   relative_risk: number
+  national_avg_years: number
   country: string
 }
 
@@ -258,6 +259,9 @@ export function scoreEstimate(p: Profile): EstimateResult {
     interval: [round1(years * (1 - rel)), round1(years * (1 + rel))],
     reaches_age: round1(p.age + years),
     relative_risk: Math.round(rr * 1000) / 1000,
+    // Same table, rr = 1.0 — mirroring scoring.rs, which serves this beside `relative_risk` so the
+    // benchmark cannot be computed from a different notion of "average" than the risk figure uses.
+    national_avg_years: averageRemainingYears(p.age, p.sex),
     country: p.country,
   }
 }

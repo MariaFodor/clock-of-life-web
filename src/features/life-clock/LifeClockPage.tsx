@@ -61,11 +61,22 @@ export function LifeClockPage() {
   // sentence — and for the moment the list is in flight, the code is what is true.
   const countryName =
     meta.data?.country_options?.find((c) => c.iso2 === estimate.country)?.name ?? estimate.country
+  // When the service withholds a national average it is saying the country's reference person was
+  // never measured — for Switzerland the bundle records that the reference is a non-smoker of
+  // cohort-average weight and that the relative risk is overstated by x1.125. The ratio is still the
+  // model's own number and is still shown, but the sentence must stop claiming it compares the
+  // reader to Swiss people. Withholding the years figure and keeping the sentence that makes the
+  // same claim in percent would suppress the honest number and keep the biased one.
+  const referenceMeasured = benchmark.data ? benchmark.data.national_avg_years !== null : true
   // "Compared with X, your risk is …" rather than "your risk is … than X": the second compares a
   // risk to a person, which is the kind of sentence that makes a reader re-read a number.
-  const riskSentence =
-    `Compared with the average person in ${countryName}, your yearly risk of dying is about ` +
-    (risk.direction === 'same' ? 'the same.' : `${risk.percent}% ${risk.direction}.`)
+  const riskSentence = referenceMeasured
+    ? `Compared with the average person in ${countryName}, your yearly risk of dying is about ` +
+      (risk.direction === 'same' ? 'the same.' : `${risk.percent}% ${risk.direction}.`)
+    : `Your yearly risk of dying is about ` +
+      (risk.direction === 'same' ? 'average' : `${risk.percent}% ${risk.direction}`) +
+      ` than the model's reference person. For ${countryName} that reference was never measured, so ` +
+      `this is not a comparison with people here.`
 
   return (
     <div>
@@ -135,19 +146,32 @@ export function LifeClockPage() {
       {benchmark.data && (
         <Card className="mt-5">
           <h2 className="mb-3 text-sm font-semibold text-clock-ink">How you compare</h2>
-          <Benchmark
-            estimateYears={estimate.estimate_years}
-            nationalAvgYears={benchmark.data.national_avg_years}
-            deltaYears={benchmark.data.delta_years}
-          />
+          {benchmark.data.national_avg_years !== null && benchmark.data.delta_years !== null ? (
+            <Benchmark
+              estimateYears={estimate.estimate_years}
+              nationalAvgYears={benchmark.data.national_avg_years}
+              deltaYears={benchmark.data.delta_years}
+            />
+          ) : (
+            /* A stated absence, not a vanished element. This branch used to be unreachable, so the
+               card simply disappeared — taking with it the only definition of "average" on the page
+               while two uses of the word stayed on screen above it. */
+            <p className="text-sm text-clock-ink">
+              We have no measured average for {countryName} to compare you with, so this page does
+              not show one. The estimate above is still this country's life table — what is missing
+              is a figure for the average person here to hold it against.
+            </p>
+          )}
           {/* Two comparisons sit on this page, both calling their yardstick "the average person",
               and a reader cannot tell whether they mean the same thing or why a large difference in
               risk goes with a small difference in years. Saying which people, and which quantity,
               is what stops them being read as one statement. */}
-          <p className="mt-2 text-xs text-clock-muted">
-            “Average” here means someone your age and sex in {countryName}. This compares years of
-            life left; the risk figure above compares the chance of dying in a year.
-          </p>
+          {benchmark.data.national_avg_years !== null && (
+            <p className="mt-2 text-xs text-clock-muted">
+              “Average” here means someone your age and sex in {countryName}. This compares years of
+              life left; the risk figure above compares the chance of dying in a year.
+            </p>
+          )}
         </Card>
       )}
 

@@ -26,7 +26,7 @@ import type {
   WhatIf,
   WhatIfChanges,
 } from './types'
-import { attributions, averageRemainingYears, scoreEstimate, scoreWhatIf } from './mockScoring'
+import { attributions, scoreEstimate, scoreWhatIf } from './mockScoring'
 
 const CONFIDENCE_WEIGHT = { strong: 1.0, moderate: 0.7, weak: 0.4, na: 0.2 } as const
 
@@ -113,7 +113,17 @@ export function createMockClient(): ApiClient {
         attributions: attributions(profile),
         created_at: new Date().toISOString(),
       })
-      return { ...s, calculation_id: id }
+      // Fields picked rather than spread: `scoreEstimate` also carries `national_avg_years`, which
+      // the HTTP client deliberately keeps off `Estimate`. Spreading it here would let a surface read
+      // a field that works against the mock and is undefined in the browser.
+      return {
+        estimate_years: s.estimate_years,
+        interval: s.interval,
+        reaches_age: s.reaches_age,
+        relative_risk: s.relative_risk,
+        country: s.country,
+        calculation_id: id,
+      }
     },
 
     async whatif(base: Profile, changes: WhatIfChanges): Promise<WhatIf> {
@@ -183,9 +193,13 @@ export function createMockClient(): ApiClient {
     },
 
     async getBenchmark(profile: Profile): Promise<Benchmark> {
-      const avg = averageRemainingYears(profile.age, profile.sex)
-      const est = scoreEstimate(profile).estimate_years
-      return { national_avg_years: avg, delta_years: round1(est - avg) }
+      // Read it off the same scored result the estimate card shows, exactly as the HTTP client now
+      // reads it off the same response — one notion of "average" per client, not two.
+      const s = scoreEstimate(profile)
+      return {
+        national_avg_years: s.national_avg_years,
+        delta_years: round1(s.estimate_years - s.national_avg_years),
+      }
     },
 
     async getWhy(profile: Profile): Promise<Attribution[]> {
