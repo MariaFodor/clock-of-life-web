@@ -55,6 +55,22 @@ function envLogHazard(loc: Location, ref: Location): number {
 
 const round1 = (x: number) => Math.round(x * 10) / 10
 
+/**
+ * JSON with object keys in sorted order, at every depth.
+ *
+ * `JSON.stringify` preserves insertion order, so two structurally identical profiles built by
+ * different code paths serialize differently. The service does not have this problem: it hashes a
+ * re-serialization of the deserialized struct, whose field order is fixed by the type.
+ */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`
+}
+
 /** A short stable id for mock rows. */
 function mockId(seed: string): string {
   let h = 0
@@ -104,7 +120,13 @@ export function createMockClient(): ApiClient {
       // of whatever sits at the top of this account's history, so the mock must too, or the seam is
       // two different products. Only CONSECUTIVE repeats: A -> B -> A is a reader changing something
       // and changing it back, which the history should show.
-      const hash = mockId(JSON.stringify(profile)).slice(5)
+      // Canonical serialization, not JSON.stringify: the service hashes a re-serialization of the
+      // deserialized struct, so ITS key order is fixed whatever the client sent. Ours followed the
+      // object's insertion order, which made the same answers hash differently depending on where the
+      // profile came from — measured: buildProfile's order vs a restored server row's order gave two
+      // hashes where the service gives one. Unreachable while InterviewPage is the only caller, and
+      // exactly the kind of divergence that surfaces the day something else calls estimate().
+      const hash = mockId(canonicalJson(profile)).slice(5)
       if (history[0]?.input_hash === hash) return { ...s, calculation_id: history[0].id }
       const id = mockId(`calc-${seq++}-${JSON.stringify(profile)}`)
       history.unshift({

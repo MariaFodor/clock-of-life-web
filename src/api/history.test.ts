@@ -22,6 +22,25 @@ describe('history', () => {
     expect(await client.listCalculations()).toHaveLength(1)
   })
 
+  it('hashes the answers, not the order they were written in', async () => {
+    // The service hashes a re-serialization of the deserialized struct, so its key order is fixed
+    // whatever the client sent. The mock used JSON.stringify, which follows insertion order — so the
+    // same answers built by two different code paths (buildProfile vs a profile restored from a
+    // stored row) hashed differently here and identically there. Unreachable while InterviewPage is
+    // the only caller of estimate(); reachable the moment anything else is.
+    const client = createMockClient()
+    const forward = { ...SAMPLE_PROFILE }
+    const reversed = Object.fromEntries(
+      Object.entries(SAMPLE_PROFILE).reverse(),
+    ) as typeof SAMPLE_PROFILE
+
+    const a = await client.estimate(forward)
+    const b = await client.estimate(reversed)
+
+    expect(b.calculation_id, 'same answers, different key order, one calculation').toBe(a.calculation_id)
+    expect(await client.listCalculations()).toHaveLength(1)
+  })
+
   it('appends when an answer actually changes', async () => {
     const client = createMockClient()
     await client.estimate(SAMPLE_PROFILE)

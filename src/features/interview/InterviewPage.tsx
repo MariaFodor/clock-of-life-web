@@ -344,8 +344,10 @@ function InterviewForm({
   const onSubmit = async () => {
     setSubmitError(null)
     if (errors.length) return
-    // Every /api/estimate call persists a calculation row, so a save-only retry must not re-score
-    // an unchanged profile — that would append one duplicate history row per click.
+    // A save-only retry must not re-score an unchanged profile. The service is now the thing that
+    // guarantees no duplicate row (it collapses a repeat of the top of history, under a per-account
+    // lock); this saves the round trip and the scoring pass, and is no longer what makes the rule
+    // true. Keeping it means the app's own double-click path rarely reaches the service's collapse.
     const profileKey = JSON.stringify(profile)
     if (lastEstimated.current !== profileKey) {
       try {
