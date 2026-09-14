@@ -220,11 +220,13 @@ export function createHttpClient(): ApiClient {
       if (!yearsCache.has(key) || !avgCache.has(key)) await runEstimate(profile)
       const userYears = yearsCache.get(key)
       const avgYears = avgCache.get(key)
-      // Throwing puts the query in its error state, so `LifeClockPage`'s `benchmark.data &&` drops
-      // the card. No comparison is the honest outcome when there is no average to compare against.
-      if (userYears === undefined || avgYears === undefined || avgYears === null) {
-        throw new Error('no national average is available for this country')
+      if (userYears === undefined || avgYears === undefined) {
+        throw new Error('the estimate did not come back')
       }
+      // Nulls, not a throw. Throwing would put this in the query's ERROR state, where a page cannot
+      // tell "this country has no average" from "the network failed" — and those deserve different
+      // sentences. The absence is data here, so it is carried as data.
+      if (avgYears === null) return { national_avg_years: null, delta_years: null }
       return { national_avg_years: avgYears, delta_years: round1(userYears - avgYears) }
     },
 

@@ -79,9 +79,10 @@ describe('the benchmark average', () => {
       ),
     )
 
-    await expect(
-      createHttpClient().getBenchmark({ ...SAMPLE_PROFILE, country: 'CY', age: 32, sex: 'F' }),
-    ).rejects.toThrow(/no national average/)
+    const result = await createHttpClient().getBenchmark({
+      ...SAMPLE_PROFILE, country: 'CY', age: 32, sex: 'F',
+    })
+    expect(result).toEqual({ national_avg_years: null, delta_years: null })
   })
 
   it('shows no card for a country whose average the service withholds', async () => {
@@ -97,9 +98,12 @@ describe('the benchmark average', () => {
       ),
     )
 
-    await expect(
-      createHttpClient().getBenchmark({ ...SAMPLE_PROFILE, country: 'CH', age: 40, sex: 'M' }),
-    ).rejects.toThrow(/no national average/)
+    const result = await createHttpClient().getBenchmark({
+      ...SAMPLE_PROFILE, country: 'CH', age: 40, sex: 'M',
+    })
+    // Null, not a rejection: the page must be able to tell this apart from a failed request, because
+    // "we have no average for Switzerland" and "something went wrong" are different sentences.
+    expect(result).toEqual({ national_avg_years: null, delta_years: null })
   })
 
   it('never points the opposite way from the risk ratio, on either client', async () => {
