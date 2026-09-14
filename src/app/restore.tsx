@@ -5,9 +5,14 @@
 // the whole time. This restores the newest persisted one on an authenticated load, for every surface
 // at once.
 //
-// It never re-scores to do it. POST /api/estimate appends a history row, so rehydrating through it
-// would grow "My Progress" by one identical entry per reload. The stored row already carries the
-// inputs that were scored and the numbers they produced, which is everything a surface reads.
+// It never re-scores to do it. That used to be because POST /api/estimate appended a history row per
+// reload; the service now collapses a re-score of the row already at the top, so the reason is
+// weaker but the approach is still right — the stored row already carries the inputs that were
+// scored and the numbers they produced, which is everything a surface reads, and re-scoring would
+// spend a round trip and a scoring pass to arrive back where it started. And if the current model
+// scored it differently, the collapse would NOT apply — the service matches on the numbers as well
+// as the answers — so every reload would append a fresh row under a new id, which is the behaviour
+// this comment exists to avoid.
 
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useCalculations } from '../api/hooks'

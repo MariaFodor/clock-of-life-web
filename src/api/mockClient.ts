@@ -27,6 +27,7 @@ import type {
   WhatIfChanges,
 } from './types'
 import { attributions, scoreEstimate, scoreWhatIf } from './mockScoring'
+import type { EstimateResult } from './mockScoring'
 
 const CONFIDENCE_WEIGHT = { strong: 1.0, moderate: 0.7, weak: 0.4, na: 0.2 } as const
 
@@ -54,6 +55,34 @@ function envLogHazard(loc: Location, ref: Location): number {
 }
 
 const round1 = (x: number) => Math.round(x * 10) / 10
+
+/**
+ * JSON with object keys in sorted order, at every depth.
+ *
+ * `JSON.stringify` preserves insertion order, so two structurally identical profiles built by
+ * different code paths serialize differently. The service does not have this problem: it hashes a
+ * re-serialization of the deserialized struct, whose field order is fixed by the type.
+ */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`
+}
+
+/** The `Estimate` the seam promises, from a scored result — the one place the fields are listed. */
+function toEstimate(s: EstimateResult, calculation_id: string): Estimate {
+  return {
+    estimate_years: s.estimate_years,
+    interval: s.interval,
+    reaches_age: s.reaches_age,
+    relative_risk: s.relative_risk,
+    country: s.country,
+    calculation_id,
+  }
+}
 
 /** A short stable id for mock rows. */
 function mockId(seed: string): string {
@@ -100,10 +129,28 @@ export function createMockClient(): ApiClient {
 
     async estimate(profile: Profile): Promise<Estimate> {
       const s = scoreEstimate(profile)
+      // Re-scoring answers nobody changed is not a new calculation — the service collapses a repeat
+      // of whatever sits at the top of this account's history, so the mock must too, or the seam is
+      // two different products. Only CONSECUTIVE repeats: A -> B -> A is a reader changing something
+      // and changing it back, which the history should show.
+      // Canonical serialization, not JSON.stringify: the service hashes a re-serialization of the
+      // deserialized struct, so ITS key order is fixed whatever the client sent. Ours followed the
+      // object's insertion order, which made the same answers hash differently depending on where the
+      // profile came from — measured: buildProfile's order vs a restored server row's order gave two
+      // hashes where the service gives one. Unreachable while InterviewPage is the only caller, and
+      // exactly the kind of divergence that surfaces the day something else calls estimate().
+      const hash = mockId(canonicalJson(profile)).slice(5)
+      // Fields picked, not spread — on BOTH paths. `scoreEstimate` carries `national_avg_years`,
+      // which the HTTP client deliberately keeps off `Estimate`; spreading it here would let a
+      // surface read a field that works against the mock and is undefined in the browser. The two
+      // returns are separate changes on separate branches that merge without conflict, so a spread
+      // left on this one would quietly restore the leak the other one removed. TypeScript does not
+      // catch it: an excess property in a spread is not an error, only in an explicit literal.
+      if (history[0]?.input_hash === hash) return toEstimate(s, history[0].id)
       const id = mockId(`calc-${seq++}-${JSON.stringify(profile)}`)
       history.unshift({
         id,
-        input_hash: mockId(JSON.stringify(profile)).slice(5),
+        input_hash: hash,
         estimate_years: s.estimate_years,
         interval_low: s.interval[0],
         interval_high: s.interval[1],
