@@ -27,6 +27,7 @@ import type {
   WhatIfChanges,
 } from './types'
 import { attributions, scoreEstimate, scoreWhatIf } from './mockScoring'
+import type { EstimateResult } from './mockScoring'
 
 const CONFIDENCE_WEIGHT = { strong: 1.0, moderate: 0.7, weak: 0.4, na: 0.2 } as const
 
@@ -69,6 +70,18 @@ function canonicalJson(value: unknown): string {
     .filter(([, v]) => v !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`
+}
+
+/** The `Estimate` the seam promises, from a scored result — the one place the fields are listed. */
+function toEstimate(s: EstimateResult, calculation_id: string): Estimate {
+  return {
+    estimate_years: s.estimate_years,
+    interval: s.interval,
+    reaches_age: s.reaches_age,
+    relative_risk: s.relative_risk,
+    country: s.country,
+    calculation_id,
+  }
 }
 
 /** A short stable id for mock rows. */
@@ -127,7 +140,13 @@ export function createMockClient(): ApiClient {
       // hashes where the service gives one. Unreachable while InterviewPage is the only caller, and
       // exactly the kind of divergence that surfaces the day something else calls estimate().
       const hash = mockId(canonicalJson(profile)).slice(5)
-      if (history[0]?.input_hash === hash) return { ...s, calculation_id: history[0].id }
+      // Fields picked, not spread — on BOTH paths. `scoreEstimate` carries `national_avg_years`,
+      // which the HTTP client deliberately keeps off `Estimate`; spreading it here would let a
+      // surface read a field that works against the mock and is undefined in the browser. The two
+      // returns are separate changes on separate branches that merge without conflict, so a spread
+      // left on this one would quietly restore the leak the other one removed. TypeScript does not
+      // catch it: an excess property in a spread is not an error, only in an explicit literal.
+      if (history[0]?.input_hash === hash) return toEstimate(s, history[0].id)
       const id = mockId(`calc-${seq++}-${JSON.stringify(profile)}`)
       history.unshift({
         id,
