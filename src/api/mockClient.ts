@@ -100,10 +100,16 @@ export function createMockClient(): ApiClient {
 
     async estimate(profile: Profile): Promise<Estimate> {
       const s = scoreEstimate(profile)
+      // Re-scoring answers nobody changed is not a new calculation — the service collapses a repeat
+      // of whatever sits at the top of this account's history, so the mock must too, or the seam is
+      // two different products. Only CONSECUTIVE repeats: A -> B -> A is a reader changing something
+      // and changing it back, which the history should show.
+      const hash = mockId(JSON.stringify(profile)).slice(5)
+      if (history[0]?.input_hash === hash) return { ...s, calculation_id: history[0].id }
       const id = mockId(`calc-${seq++}-${JSON.stringify(profile)}`)
       history.unshift({
         id,
-        input_hash: mockId(JSON.stringify(profile)).slice(5),
+        input_hash: hash,
         estimate_years: s.estimate_years,
         interval_low: s.interval[0],
         interval_high: s.interval[1],
