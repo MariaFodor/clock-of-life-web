@@ -3,7 +3,7 @@
 // These mirror the Rust service's serde structs (clock-of-life-service/src/{lib,scoring,db}.rs) so that
 // when the OpenAPI client generation lands (ARCH-04), this file is replaced by generated types with no
 // change to callers. Fields not yet served by the backend are marked MOCK-ONLY and live behind the
-// same client seam so the "Why?/Improve/Relocate/Stats" surfaces can be built ahead of their endpoints.
+// same client seam so the "Why?/Improve/Relocate" surfaces can be built ahead of their endpoints.
 
 /** Sex as the model expects it (drives the life table, not the risk score). */
 export type Sex = 'M' | 'F'
@@ -265,15 +265,6 @@ export interface Benchmark {
   national_avg_years: number | null
   /** user's estimate minus the national average (positive = above average); null with no average */
   delta_years: number | null
-}
-
-/** Cohort aggregate for the Statistics surface — always k-gated (k ≥ 20). */
-export interface CohortStat {
-  label: string
-  cohort_size: number
-  /** null when suppressed for small-cohort privacy (k < 20) */
-  mean_estimate_years: number | null
-  suppressed: boolean
 }
 
 // ── The World surface (GET /api/atlas) ────────────────────────────────────────

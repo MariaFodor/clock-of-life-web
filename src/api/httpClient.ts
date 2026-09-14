@@ -16,7 +16,6 @@ import type {
   AuthResult,
   Benchmark,
   CalcRow,
-  CohortStat,
   EvidenceGrade,
   Estimate,
   FactorRole,
@@ -354,28 +353,5 @@ export function createHttpClient(): ApiClient {
       return get<CountryPlaces>(`/places/${encodeURIComponent(iso3)}`)
     },
 
-    async getStats(): Promise<CohortStat[]> {
-      const agg = await get<{
-        n: number
-        estimate_years: { mean: number; p10: number; p50: number; p90: number } | null
-        by_country: Array<{ country: string | null; n: number; mean_years: number | null }>
-      }>('/aggregates')
-
-      const stats: CohortStat[] = [
-        {
-          label: 'All users',
-          cohort_size: agg.n,
-          mean_estimate_years: agg.estimate_years ? round1(agg.estimate_years.mean) : null,
-          suppressed: agg.estimate_years === null,
-        },
-        ...agg.by_country.map((c) => ({
-          label: c.country ?? 'Unknown',
-          cohort_size: c.n,
-          mean_estimate_years: c.mean_years != null ? round1(c.mean_years) : null,
-          suppressed: c.mean_years == null,
-        })),
-      ]
-      return stats
-    },
   }
 }

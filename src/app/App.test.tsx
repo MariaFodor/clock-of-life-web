@@ -37,6 +37,19 @@ describe('<App/> auth gate + shell', () => {
     expect(screen.getByRole('link', { name: /where to live/i })).toBeInTheDocument()
   })
 
+  it('sends an old /stats bookmark to the Life Clock rather than a blank page', async () => {
+    // The Statistics page is gone: against the real service it rendered one row reading
+    // "hidden (k < 20)", and even fully populated it would have shown the spread of this model's own
+    // output across whoever happened to visit — the app's only figure that is neither published nor
+    // computed for the reader. Anyone who bookmarked it still deserves to land somewhere.
+    const user = userEvent.setup()
+    renderWithProviders(<App />, { route: '/stats' })
+    await signIn(user)
+
+    expect(await screen.findByRole('heading', { name: /my life clock/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /statistics/i })).toBeNull()
+  })
+
   it('toggles between light and dark themes', async () => {
     const user = userEvent.setup()
     renderWithProviders(<App />)
